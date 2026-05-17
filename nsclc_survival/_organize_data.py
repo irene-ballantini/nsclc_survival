@@ -9,6 +9,8 @@ metadata (PatientID and Modality) using pydicom, and moves the files into
 a new structured directory format organized by PatientID and Modality:
 ../data/organized_data/{PatientID}/{Modality}/
 
+It also removes the original raw data folders after successful reorganization to save space.
+
 """
 
 import shutil

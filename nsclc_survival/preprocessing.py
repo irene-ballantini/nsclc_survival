@@ -15,8 +15,8 @@ class RadiomicsPreprocessor:
     """
 
     def __init__(self, organized_path, preprocessed_path):
-        self.organized_path = organized_path
-        self.preprocessed_path = preprocessed_path
+        self.organized_path = Path(organized_path)
+        self.preprocessed_path = Path(preprocessed_path)
         self.preprocessed_path.mkdir(parents=True, exist_ok=True)
 
     def process_all_patients(self):
