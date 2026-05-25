@@ -190,3 +190,168 @@ class RadiomicsClinicalDataProcessor:
         print(f"Split completed. Train size: {self.X_train.shape[0]}, Test size: {self.X_test.shape[0]}")
         return self.X_train, self.X_test, self.y_train, self.y_test
     
+# ==========================================
+# 2. MODEL CLASS: LASSO-COX
+# ==========================================
+class LassoCoxModel:
+    """
+    Handles training, hyperparameter alpha optimization, and evaluation of a LASSO-regularized regression Cox model.
+
+    This class selects the radiomics features that are most relevant for predicting survival outcomes, 
+    while also providing a measure of model performance through the C-index.  
+
+    Attributes:
+        model (CoxnetSurvivalAnalysis or None): The final estimator optimized
+            via Cross-Validation. Initially set to None.
+        best_alpha (float or None): The optimal alpha penalty parameter found 
+            during optimization. Initially set to None.
+    """
+    def __init__(self, feature_names, stage, gender, histology):
+        self.model = None
+        self.best_alpha = None
+        self.feature_names = feature_names
+        self.stage = stage
+        self.gender = gender
+        self.histology = histology
+
+    def fit_crossval(self, X_train, y_train, cv=5, n_repeats=3, alpha_param_grid=None):     
+        print("Starting optimized research through GridSearchCV...")
+        
+        # 1. Use ElasticNet
+        l1_ratio_chosen = 1.0
+        
+        # 2. Define a logarithmic grid for alphas.
+        # Avoid too big values that brings everything to 0,
+        # and avoid very small values (e.g. < 1e-4) that cause the ArithmeticError because of the weights too large.
+        if alpha_param_grid is None:
+            alpha_param_grid= {
+                "alphas": [[a] for a in np.logspace(-1.0, -0.1, num=20)]
+            }
+        
+        # Crate an array of weights for the penalty as long as the column in X 
+        # 1 = normal penalty (for radiomics features)
+        # 0 = no penalty(clinical variables never reset to zero by LASSO)
+        penalty_factors = np.ones(X_train.shape[1])
+
+        # Find the clinical column indexes 
+        clinical = [self.stage, self.gender] + [col for col in self.feature_names if self.histology in col]
+
+        for col in clinical:
+            if col in self.feature_names:
+                idx = self.feature_names.index(col)
+                penalty_factors[idx] = 0.0  # in this way LASSO doesn't penalize them
+
+        base_estimator = CoxnetSurvivalAnalysis(
+            l1_ratio=l1_ratio_chosen,
+            max_iter=100000,
+            tol=1e-3, 
+            penalty_factor=penalty_factors
+        )
+
+        cv_strategy = RepeatedKFold(n_splits=cv, n_repeats=n_repeats, random_state=42)
+        
+        # Use GridSearchCV 
+        gcv = GridSearchCV(
+            estimator=base_estimator,
+            param_grid=alpha_param_grid,
+            cv=cv_strategy,
+            error_score=0.5 # If a fold fails, it assigns the pure chance C-index (0.5)
+        )
+        
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            warnings.filterwarnings("ignore", message=".*all coefficients are zero.*")
+            gcv.fit(X_train, y_train)
+        
+        # Extract the optimal alpha and internal validation
+        self.best_alpha = gcv.best_params_["alphas"][0]
+        mean_best_score = gcv.best_score_
+        best_index = gcv.best_index_
+        cv_results = gcv.cv_results_
+        std_best_score = cv_results['std_test_score'][best_index]    # local test fold result of CV
+        
+        print(f"Optimization completed. Best Alpha: {self.best_alpha:.6f}" )
+        print(f"(Mean Validation C-index: {mean_best_score:.4f} \u00B1 {std_best_score:.4f})")
+        
+        # 3. Train the final model
+        self.model = CoxnetSurvivalAnalysis(
+            l1_ratio=l1_ratio_chosen,
+            alphas=[self.best_alpha],
+            max_iter=150000,
+            tol=1e-4,
+            penalty_factor=penalty_factors,
+            fit_baseline_model=True
+        )
+        
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            self.model.fit(X_train, y_train)
+
+    def evaluate_model(self, X_test, y_test):
+        """
+        Calculate the C-index on the test set.
+
+        Args:
+            X_test (array-like or pandas.DataFrame): Test feature matrix 
+                of shape (n_samples, n_features).
+            y_test (NumPy structured array): Survival target for testing 
+                (event status, time) used for external validation.
+
+        Raises:
+            ValueError: If the model has not been trained with fit_crossval().
+
+        Returns:
+            float: The C-index (Harrell's concordance coefficient) on the test set.
+        """
+        if self.model is None:
+            raise ValueError("The model must be trained first with fit_crossval()")
+        c_index = self.model.score(X_test, y_test)
+        print(f"LASSO-Cox C-index on Test Set: {c_index:.4f}")
+        return c_index
+
+    def get_selected_features(self, feature_names):
+        """
+        Extract radiomic features selected by the LASSO penalty, along with 
+        their coefficients and Hazard Ratios (HR), ordered by absolute impact:
+
+        - HR < 1 indicates a protective effect (associated with better survival),
+        - HR > 1 indicates a risk factor (associated with worse survival).
+
+        Args:
+            feature_names (list of str or pandas.Index): Full list containing the names of all original features.
+
+        Raises:
+            ValueError: If the model has not been trained with fit_crossval().
+
+        Returns:
+            pandas.DataFrame: A DataFrame containing 'Feature', 'Coefficient', 
+                and 'Hazard_Ratio' for all features whose coefficients were 
+                not shrunk to zero, sorted by absolute coefficient value.
+        """
+        if self.model is None:
+            raise ValueError("The model must be trained first with fit_crossval()")
+        
+        # Use .squeeze() to be sure to get a 1D array
+        coefs = self.model.coef_.squeeze()
+
+        # Create a DataFrame with Feature, Coefficient and Hazard Ratio
+        df_features = pd.DataFrame({
+            'Feature': feature_names,
+            'Coefficient': coefs,
+            'Hazard_Ratio': np.exp(coefs)
+        })
+
+        # Filter features with non-zero coefficients
+        df_selected = df_features[df_features['Coefficient'] != 0].copy()
+        
+        # Order by absolute value of coefficient (most influential features at the top)
+        df_selected['Abs_Coefficient'] = df_selected['Coefficient'].abs()
+        # ascending=False -> descending order
+        df_selected = df_selected.sort_values(by='Abs_Coefficient', ascending=False).drop(columns=['Abs_Coefficient'])
+
+        selected_names = df_selected['Feature'].tolist()
+        print(f"Feature selected ({len(selected_names)} out of {len(feature_names)}): {selected_names}")
+        
+        return df_selected
+        
+    
