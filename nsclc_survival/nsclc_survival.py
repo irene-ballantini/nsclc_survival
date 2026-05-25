@@ -184,7 +184,6 @@ class RadiomicsClinicalDataProcessor:
         self.X_test = self.scaler.transform(X_test_imputed)
         
         # Save feature names for later use
-        #self.feature_names = X.columns
         self.feature_names = X.columns.tolist()
         
         print(f"Split completed. Train size: {self.X_train.shape[0]}, Test size: {self.X_test.shape[0]}")
@@ -217,10 +216,10 @@ class LassoCoxModel:
     def fit_crossval(self, X_train, y_train, cv=5, n_repeats=3, alpha_param_grid=None):     
         print("Starting optimized research through GridSearchCV...")
         
-        # 1. Use ElasticNet
+        # Use ElasticNet
         l1_ratio_chosen = 1.0
         
-        # 2. Define a logarithmic grid for alphas.
+        # Define a logarithmic grid for alphas.
         # Avoid too big values that brings everything to 0,
         # and avoid very small values (e.g. < 1e-4) that cause the ArithmeticError because of the weights too large.
         if alpha_param_grid is None:
@@ -273,7 +272,7 @@ class LassoCoxModel:
         print(f"Optimization completed. Best Alpha: {self.best_alpha:.6f}" )
         print(f"(Mean Validation C-index: {mean_best_score:.4f} \u00B1 {std_best_score:.4f})")
         
-        # 3. Train the final model
+        # Train the final model
         self.model = CoxnetSurvivalAnalysis(
             l1_ratio=l1_ratio_chosen,
             alphas=[self.best_alpha],
@@ -354,4 +353,155 @@ class LassoCoxModel:
         
         return df_selected
         
+    def predict_survival_time(self, X_test):
+        """
+        Predict the median survival time (expressed in days and months) 
+        for each patient using the optimized Cox model and returns the survival curves.
+
+        The median survival time is defined as the time point at which the 
+        survival probability drops to or below 50%. If a patient's survival curve 
+        never reaches 50% within the maximum observation period, the maximum 
+        available follow-up time is returned as a conservative estimate.
+
+        Args:
+            X_test (array-like or pandas.DataFrame): Feature matrix for the test samples.
+
+        Raises:
+            ValueError: If the model has not been trained with fit_crossval().
+
+        Returns:
+            tuple: (predicted_medians_d, predicted_medians_m, survival_functions) where:
+                - predicted_medians_d (numpy.ndarray): 1D array of predicted median survival times in days.
+                - predicted_medians_m (numpy.ndarray): 1D array of predicted median survival times in months.
+                - survival_functions (list of sksurv.functions.StepFunction): Computed survival curves.
+        """
+        if self.model is None:
+            raise ValueError("The model must be trained first with fit_crossval()")
+        
+        survival_functions = self.model.predict_survival_function(X_test)
+        
+        predicted_medians_d = []
+        average_days_per_month = 30.437
+        
+        for fn in survival_functions:
+            # fn.x = time points (e.g., days or months), fn.y = survival probabilities
+            under_50 = np.where(fn.y <= 0.5)[0]
+            
+            if len(under_50) > 0:
+                idx = under_50[0]
+                # Optional refinement: if it's strictly less than 0.5, we can approximate 
+                # better by checking the step right before, or just take the first cross-point.
+                median_time_d = fn.x[idx]
+            else:
+                # If the probability never drops below 50%, the median is mathematically undefined.
+                # We fallback to the maximum observation time in the study for that curve.
+                median_time_d = fn.x[-1]
+            predicted_medians_d.append(median_time_d)
+        
+        predicted_medians_d = np.array(predicted_medians_d)
+        predicted_medians_m = predicted_medians_d/average_days_per_month                
+
+        return predicted_medians_d, predicted_medians_m, survival_functions
     
+    def compute_risk_scores(self, X_input, patient_ids, patientID, predicted_medians_d, predicted_medians_m, y_input=None):
+        """
+        Compute the risk scores (Rad-Scores) for the input data using the trained model.
+        Args:
+            X_input (array-like or pandas.DataFrame): Feature matrix for which to compute risk scores.
+            patient_ids (list of str): list of strings containing the patient identifiers
+            patientID (str): name of the Dataframe column containing the patient identifiers
+            predicted_medians_d (numpy.ndarray): 1D array of predicted median survival times in days.
+            predicted_medians_m (numpy.ndarray): 1D array of predicted median survival times in months.
+            y_input (NumPy structured array): If provided, should contain the event status and time for each sample. 
+                If given, the returned DataFrame will include 'Event_Status' and 'Survival_Time'. Defaults to None.
+            return_survival_curves (bool): If True, also compute and return the predicted survival curves for each sample.
+        Raises:
+            ValueError: If the model has not been trained with fit_crossval().
+
+        Returns:
+            pandas.DataFrame: A fully structured DataFrame containing patient IDs, Risk Scores, 
+                predicted times, and (if provided) ground truth survival data.
+        
+        """     
+
+        if self.model is None:
+            raise ValueError("The model must be trained first with fit_crossval()")
+
+        # Compute linear index (Rad-Score)
+        # Use .squeeze() to be sure to get a 1D array
+        risk_scores = self.model.predict(X_input).squeeze()  
+        
+        # Create a basic dictionary for the output DataFrame
+        risk_dict = {
+            patientID: patient_ids,
+            'Risk_Score': risk_scores}
+        
+        if y_input is not None:
+            risk_dict['Event_Status'] = [y[0] for y in y_input]
+            risk_dict['Survival_Time'] = [y[1] for y in y_input]
+
+        risk_dict["Predicted_Median_Days"] = predicted_medians_d
+        risk_dict["Predicted_Median_Months"]= predicted_medians_m
+
+        df_risk = pd.DataFrame(risk_dict)
+        
+        return df_risk
+    
+    def compute_residuals_and_metrics(self, df_global, patientID):
+        """
+        Filter out censored patients keeping only those with an observed event, 
+        print linear regression metrics (MAE/RMSE), and return a clean residuals DataFrame.
+
+        Args:
+            df_global (pandas.DataFrame): The global structured DataFrame containing actual values and predictions.
+            patientID (str): Name of the DataFrame column containing the patient identifiers.
+
+        Returns:
+            pandas.DataFrame or None: A filtered DataFrame containing residuals for patients with an observed event.
+                Returns None if no events are observed in the input data.
+        """
+
+        # Boolean mask to filter only patients with observed events
+        event_observed = df_global['Event_Status'] == True
+        
+        if not np.any(event_observed):
+            print("[!] Time Error: No observed events found in the Test Set. Cannot compute MAE/RMSE.")
+            return None
+
+        # Extract the filtered data directly from the passed global DataFrame
+        df_ev = df_global[event_observed].copy()
+
+        actual_days = df_ev['Survival_Time']
+        actual_months = actual_days / 30.437
+        pred_days = df_ev['Predicted_Median_Days']
+        pred_months = df_ev['Predicted_Median_Months']
+
+        # Linear error metrics computation
+        mae_days = mean_absolute_error(actual_days, pred_days)
+        rmse_days = root_mean_squared_error(actual_days, pred_days)
+        mae_months = mean_absolute_error(actual_months, pred_months)
+        rmse_months = root_mean_squared_error(actual_months, pred_months)
+    
+        print(f"[*] Survival Time Error Analysis (N. patients with event = {len(df_ev)}):")
+        print(f"    - Mean Absolute Error (MAE):   {mae_days:.2f} days | {mae_months:.2f} months")
+        print(f"    - Root Mean Squared Error (RMSE): {rmse_days:.2f} days | {rmse_months:.2f} months")
+        print("="*50)
+        
+        # Build the Datafram
+        df_residuals = pd.DataFrame({
+            patientID: df_ev[patientID],
+            'Risk_Score': df_ev['Risk_Score'],
+            'Actual_Days': actual_days,
+            'Predicted_Median_Days': pred_days,
+            'Absolute_Error_Days': np.abs(actual_days - pred_days),
+            'Days_Residual': actual_days - pred_days,
+            'Actual_Months': actual_months,
+            'Predicted_Median_Months': pred_months,
+            'Absolute_Error_Months': np.abs(actual_months - pred_months),
+            'Months_Residual': actual_months - pred_months
+        })
+
+        return df_residuals
+
+
+   
