@@ -46,3 +46,4 @@ gender_mapping = {'male': 1, 'female': 0}
 
 # --- Survival curves plots path ---
 PLOT_SURVIVAL_CURVES = PLOT_PATH / "survival_curves_comparison.png"
+PLOT_DEV_RESIDUALS = PLOT_PATH / "risk_scores_vs_deviance_residuals.png"

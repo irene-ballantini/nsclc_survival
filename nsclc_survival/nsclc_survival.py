@@ -562,7 +562,7 @@ class LassoCoxModel:
     
         return ibs_score
     
-    def compute_martingale_and_deviance_residuals(self, X_input, y_input, patient_ids, patientID):
+    def compute_martingale_and_deviance_residuals(self, X_input, y_input, patient_ids, patientID, df_risk):
         """
         Compute Martingale and Deviance residuals for each single patient to identify 
         where the Risk Score (Rad-Score) failed or succeeded in stratifying risk.
@@ -615,6 +615,7 @@ class LassoCoxModel:
         # 6. Build the final structured DataFrame
         df_risk_residuals = pd.DataFrame({
             patientID: patient_ids,
+            'Risk_Score': df_risk['Risk_Score'],
             'Event_Status': y_input['Event_Status'],
             'Survival_Time': times,
             'Cumulative_Hazard_Predicted': predicted_cum_hazard,

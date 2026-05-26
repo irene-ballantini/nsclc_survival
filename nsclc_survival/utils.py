@@ -70,3 +70,83 @@ def plot_extreme_survival_curves(survival_functions, risk_scores, output_path):
     plt.legend()
     plt.savefig(output_path)
     #plt.show()
+
+def plot_deviance_residuals(df_risk_residuals, output_path):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Se nel tuo dataframe il Risk Score non è presente, lo recuperiamo calcolandolo 
+    # o passandolo. Assumiamo che tu lo abbia unito o che sia presente. 
+    # Se hai usato il df dei residui puro, ricordati che contiene 'Cumulative_Hazard_Predicted'.
+    # Per consistenza, usiamo il logaritmo del rischio cumulativo o, se lo hai salvato, 
+    # il 'Risk_Score' (Rad-Score) dal df_risk_scores.
+  
+    plt.figure(figsize=(10, 6))
+    
+    # Se passi il df dei residui puro, possiamo usare il log del Cumulative Hazard 
+    # che è matematicamente proporzionale al Risk Score lineare del modello di Cox.
+    # Se hai già una colonna 'Risk_Score', usa quella!
+    if 'Risk_Score' in df_risk_residuals.columns:
+        x_values = df_risk_residuals['Risk_Score']
+        x_label = 'Risk Score (Rad-Score)'
+    else:
+        # Failsafe: usiamo il log del rischio cumulativo predetto
+        x_values = np.log(df_risk_residuals['Cumulative_Hazard_Predicted'])
+        x_label = 'Log(Predicted Cumulative Hazard)'
+
+    y_values = df_risk_residuals['Deviance_Residual']
+    status = df_risk_residuals['Event_Status'].values
+
+    is_event = (status == True)
+    is_censored = (status == False)
+  
+    #Definiamo i colori in base allo stato dell'evento (0 = Censurato, 1 = Evento)
+    #Rende il grafico molto più informativo dal punto di vista clinico!  
+    status_labels = df_risk_residuals['Event_Status'].map({
+        True: 'Event (Deceased)', 
+        False: 'Censored (Alive)'
+    })
+
+    # 3. Disegno dei punti dei Censurati (BLU)
+    plt.scatter(
+        x=x_values[is_censored],
+        y=y_values[is_censored],
+        color='#1f77b4',
+        alpha=0.8,
+        edgecolors='w',
+        s=70,
+        label='Censored (Alive)' # L'etichetta è legata direttamente al colore!
+    )
+
+    # 4. Disegno dei punti degli Eventi (ROSSO)
+    plt.scatter(
+        x=x_values[is_event],
+        y=y_values[is_event],
+        color='#d62728',
+        alpha=0.8,
+        edgecolors='w',
+        s=70,
+        label='Event (Deceased)' # L'etichetta è legata direttamente al colore!
+    )
+   
+    # Linea di riferimento sullo zero (modello ideale)
+    plt.axhline(y=0, color='black', linestyle='-', linewidth=1.2)
+    
+    # Linee di soglia critica per gli outlier statistici (+2 e -2)
+    plt.axhline(y=2, color='gray', linestyle='--', linewidth=1, label='Outlier Threshold ($\pm$2)')
+    plt.axhline(y=-2, color='gray', linestyle='--')
+    
+    # Formattazione grafica
+    plt.title('Model Diagnostics: Risk Score vs Deviance Residuals', fontsize=14, fontweight='bold', pad=15)
+    plt.xlabel(x_label, fontsize=12)
+    plt.ylabel('Deviance Residuals', fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.5)
+    
+    # Sistemazione della legenda
+    plt.legend(title='Patient Status', loc='best')
+    
+    # Ottimizzazione spazi e salvataggio
+    plt.tight_layout()
+    
+    if output_path:
+        plt.savefig(output_path, dpi=300)
+        print(f"[*] Residuals diagnostic plot saved to: {output_path}")

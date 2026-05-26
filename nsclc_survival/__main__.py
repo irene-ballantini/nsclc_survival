@@ -9,9 +9,9 @@ from feature_extractor import FeatureExtractor
 from nsclc_survival import RadiomicsClinicalDataProcessor
 from nsclc_survival import LassoCoxModel
 from utils import save_features_to_csv
-from utils import plot_extreme_survival_curves
+from utils import plot_extreme_survival_curves, plot_deviance_residuals
 from settings import ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH
-from settings import RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES 
+from settings import RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES, PLOT_DEV_RESIDUALS
 from settings import patientID, survival_time_col, event_status_col, stage_col, gender_col, histology_col
 from settings import stage_mapping, gender_mapping
 
@@ -150,11 +150,18 @@ def main ():
         X_input=X_test,
         y_input=y_test,
         patient_ids=data_processor.patient_ids_test,
-        patientID=patientID
+        patientID=patientID, 
+        df_risk = df_risk_scores
     )
     
     if df_risk_residuals is not None:
         df_risk_residuals.to_csv(output_directory / "test_set_risk_residuals.csv", index=False, float_format="%.2f")
+        # >>> GENERIAMO IL GRAFICO <<<
+        print("\n--- STEP 7: PLOTTING RESIDUALS DIAGNOSTICS ---")
+        plot_deviance_residuals(
+            df_risk_residuals=df_risk_residuals,
+            output_path=PLOT_DEV_RESIDUALS
+        )
 
 
     print("\nPipeline executed successfully!")
