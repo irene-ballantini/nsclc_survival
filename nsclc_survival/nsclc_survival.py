@@ -562,5 +562,69 @@ class LassoCoxModel:
     
         return ibs_score
     
+    def compute_martingale_and_deviance_residuals(self, X_input, y_input, patient_ids, patientID):
+        """
+        Compute Martingale and Deviance residuals for each single patient to identify 
+        where the Risk Score (Rad-Score) failed or succeeded in stratifying risk.
+
+        Args:
+            X_input (array-like or pandas.DataFrame): Feature matrix (e.g., X_test).
+            y_input (NumPy structured array): Structured target array (e.g., y_test).
+            patient_ids (list of str): List containing the patient identifiers.
+            patientID (str): Name of the column containing patient identifiers.
+
+        Returns:
+            pandas.DataFrame: A DataFrame containing Patient IDs, risk indicators, 
+                and both Martingale and Deviance residuals.
+        """
+        if self.model is None:
+            raise ValueError("The model must be trained first with fit_crossval()")
+
+        # 1. Extract event status (as 0/1) and survival times
+        delta = y_input['Event_Status'].astype(int)
+        times = y_input['Survival_Time']
+
+        # 2. Extract cumulative hazard functions from the trained model: H_i(t) = -log(S_i(t))
+        cum_hazard_funcs = self.model.predict_cumulative_hazard_function(X_input)
+
+        # 3. Evaluate the predicted cumulative hazard exactly at each patient's exit time
+        predicted_cum_hazard = []
+        for i, fn in enumerate(cum_hazard_funcs):
+            patient_time = times[i]
+            try:
+                val = fn(patient_time)
+            except ValueError:
+                # Fallback to the last available value if the test time is out of the curve domain calculated on the train set
+                val = fn.y[-1]
+            predicted_cum_hazard.append(val)
+
+        predicted_cum_hazard = np.array(predicted_cum_hazard)
+        # Avoid log(0) or division by zero issues
+        predicted_cum_hazard = np.clip(predicted_cum_hazard, 1e-7, None)
+
+        # 4. Compute Martingale Residuals: M_i = delta_i - H_i(t_i)
+        martingale_residuals = delta - predicted_cum_hazard
+
+        # 5. Compute Deviance Residuals (Symmetric transformation)
+        with np.errstate(invalid='ignore', divide='ignore'):
+            adj_term = np.where(delta > 0, delta * np.log(delta - martingale_residuals), 0)    # Corrective term
+            deviance_residuals = np.sign(martingale_residuals) * np.sqrt(
+                -2 * (martingale_residuals + adj_term)
+            )
+
+        # 6. Build the final structured DataFrame
+        df_risk_residuals = pd.DataFrame({
+            patientID: patient_ids,
+            'Event_Status': y_input['Event_Status'],
+            'Survival_Time': times,
+            'Cumulative_Hazard_Predicted': predicted_cum_hazard,
+            'Martingale_Residual': martingale_residuals,
+            'Deviance_Residual': deviance_residuals
+        })
+
+        return df_risk_residuals
+
+        
+    
    
    

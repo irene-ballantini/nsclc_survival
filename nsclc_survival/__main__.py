@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from pathlib import Path
-import pandas as pd 
+import pandas as pd
 from __version__ import __version__
 from preprocessing import RadiomicsPreprocessor
 from feature_extractor import FeatureExtractor
@@ -145,7 +145,17 @@ def main ():
         print("\nPatients with the smallest temporal prediction error:")
         print(best_predictions[col].head(5).to_string(index=False))
 
+    # Individual Error on Risk Score
+    df_risk_residuals = lasso_cox.compute_martingale_and_deviance_residuals(
+        X_input=X_test,
+        y_input=y_test,
+        patient_ids=data_processor.patient_ids_test,
+        patientID=patientID
+    )
     
+    if df_risk_residuals is not None:
+        df_risk_residuals.to_csv(output_directory / "test_set_risk_residuals.csv", index=False, float_format="%.2f")
+
 
     print("\nPipeline executed successfully!")
 
