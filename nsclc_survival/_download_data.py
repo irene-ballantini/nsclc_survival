@@ -16,7 +16,7 @@ Attributes (from settings.py):
 """
 
 from tcia_utils import nbia
-from settings import RAW_DATA_PATH, COLLECTION_NAME, N_PATIENTS
+from settings import RAW_DATA_PATH, COLLECTION_NAME, N_PATIENTS, patientID, modality, CT, RTSTRUCT
 
 # Creation of folder for raw data
 RAW_DATA_PATH.mkdir(parents=True, exist_ok=True)
@@ -29,19 +29,29 @@ df = nbia.getSeries(collection=COLLECTION_NAME, format="df")
 #print(df.info())
 
 # 2. Filtering logic: we are looking for patients with CT + RTSTRUCT
-patients_ct = set(df[df['Modality'] == 'CT']['PatientID'])
-patients_rt = set(df[df['Modality'] == 'RTSTRUCT']['PatientID'])
+patients_ct = set(df[df[modality] == CT][patientID])
+patients_rt = set(df[df[modality] == RTSTRUCT][patientID])
 valid_patients = sorted(list(patients_ct.intersection(patients_rt)))
+
+if len(valid_patients) == 0:
+    raise ValueError(f"Error: No patients found with both {CT} and {RTSTRUCT} in '{COLLECTION_NAME}'.")
 
 print(f"Found {len(valid_patients)} complete patients.")
 
 # 3. Select a subset (e.g. 100)
-subset_patients = valid_patients[:N_PATIENTS]
-df_to_download = df[df['PatientID'].isin(subset_patients)]
+if len(valid_patients) < N_PATIENTS:
+    # If N_PATIENTS is greater than the available patients
+    print(f"Warning: Requested {N_PATIENTS} patients, but only {len(valid_patients)} are available.")
+    actual_download_count = len(valid_patients)
+else:
+    actual_download_count = N_PATIENTS
+
+subset_patients = valid_patients[:actual_download_count]
+df_to_download = df[df[patientID].isin(subset_patients)]
 
 series_dict_list = df_to_download.to_dict(orient='records')
 
-print(f"Starting download for {N_PATIENTS} patients in {RAW_DATA_PATH}...")
+print(f"Starting download for {actual_download_count} patients in {RAW_DATA_PATH}...")
 nbia.downloadSeries(series_dict_list, path=RAW_DATA_PATH)
 print("Download completed successfully!")
 

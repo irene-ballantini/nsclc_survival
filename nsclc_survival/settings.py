@@ -29,6 +29,10 @@ CLINICAL_FEATURES_CSV_PATH = CLINICAL_FEATURES_PATH / "NSCLC-Radiomics-Lung1.cli
 # --- Download Parameters ---
 COLLECTION_NAME = "NSCLC-Radiomics"
 N_PATIENTS = 100
+patientID = "PatientID"
+modality = "Modality"
+CT = "CT"
+RTSTRUCT ="RTSTRUCT"
 
 # --- Clinical features names columns ---
 patientID = "PatientID"
