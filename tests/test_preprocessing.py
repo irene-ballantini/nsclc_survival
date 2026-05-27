@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # Import the class
 from nsclc_survival.preprocessing import RadiomicsPreprocessor  
@@ -15,7 +15,7 @@ def setup_mock_dataset(tmp_path):
     """
     Fixture to create a simulated DICOM/RTSTRUCT dataset structure.
 
-    Generates dummy `.dcm` files inside a structured patient directory to mimic
+    Generates dummy .dcm files inside a structured patient directory to mimic
     an organized clinical dataset.
 
     Args:
@@ -49,38 +49,44 @@ def setup_mock_dataset(tmp_path):
     
     return organized_dir, preprocessed_dir, patient_id
 
-
-@patch('nsclc_survival.preprocessing.RTStructBuilder.create_from')
-@patch('nsclc_survival.preprocessing.sitk.ImageSeriesReader.Execute')
-@patch('nsclc_survival.preprocessing.sitk.ImageSeriesReader.GetGDCMSeriesFileNames')
-def test_pipeline_success(mock_get_dicoms, mock_sitk_execute, mock_rt_builder, setup_mock_dataset):
+@pytest.mark.parametrize("input_spacing, expected_size", [
+    ([0.8, 0.8, 2.0], (8, 8, 10)),   # Case 1: Image to resample (New Size = Old Size * Input Spacing / Target Spacing)
+    ([1.0, 1.0, 1.0], (10, 10, 5))   # Case 2: Image already isotropic (It remains the same)
+])
+def test_pipeline_success(input_spacing, expected_size, setup_mock_dataset, mocker):
     """
     Test that the preprocessor successfully completes the extraction and the resampling.
 
     Verify that given a valid CT series and a matching RTSTRUCT with the target ROI,
     the preprocessor outputs NIfTI images (.nii.gz) for both image and mask, and 
-    correctly resamples them to isotropic (1.0mm) spacing.
+    correctly resamples them to isotropic (1.0mm) spacing. Handles both anisotropic 
+    and native isotropic input images.
 
     Args:
-        mock_get_dicoms (unittest.mock.MagicMock): Mocked SimpleITK DICOM filenames reader.
-        mock_sitk_execute (unittest.mock.MagicMock): Mocked SimpleITK image reader execution.
-        mock_rt_builder (unittest.mock.MagicMock): Mocked RTStructBuilder creator.
+        input_spacing (list): The pixel spacing of the simulated input CT image.
+        expected_size (tuple): The expected pixel dimensions of the output NIfTI image.
         setup_mock_dataset (tuple): Tuple containing (organized_dir, preprocessed_dir, patient_id)
-            provided by the setup fixture..
+            provided by the setup fixture.
+        mocker (pytest_mock.plugin.MockerFixture): Pytest-mock fixture to patch internal objects.
     """
     organized_dir, preprocessed_dir, patient_id = setup_mock_dataset
+
+    # Create the mocks using the native fixture 'mocker' of pytest
+    mock_get_dicoms = mocker.patch('nsclc_survival.preprocessing.sitk.ImageSeriesReader.GetGDCMSeriesFileNames')
+    mock_sitk_execute = mocker.patch('nsclc_survival.preprocessing.sitk.ImageSeriesReader.Execute')
+    mock_rt_builder = mocker.patch('nsclc_survival.preprocessing.RTStructBuilder.create_from')
     
     # 1. Mocking of SimpleITK for reading the series CT
     # Create a fake image ITK (e.g. 10x10x5 voxel, spacing 0.8x0.8x2.0mm)
     fake_ct = sitk.Image(10, 10, 5, sitk.sitkInt16)
-    fake_ct.SetSpacing([0.8, 0.8, 2.0])
+    fake_ct.SetSpacing(input_spacing)
     fake_ct.SetOrigin([0.0, 0.0, 0.0])
     mock_sitk_execute.return_value = fake_ct
     mock_get_dicoms.return_value = ["fake_ct_slice1.dcm"]
 
     # 2. Mocking of RTStructBuilder and of the returned rtstruct object
     mock_rtstruct_instance = MagicMock()
-    # Comunicate that the "GTV-1" ROI is present
+    # Communicate that the "GTV-1" ROI is present
     mock_rtstruct_instance.get_roi_names.return_value = ["GTV-1", "SpinalCord"]
     # Return a numpy mask coherent with the dimension of the CT (H, W, Slices) -> (10, 10, 5)
     fake_mask_np = np.zeros((10, 10, 5), dtype=bool)
@@ -109,11 +115,10 @@ def test_pipeline_success(mock_get_dicoms, mock_sitk_execute, mock_rt_builder, s
     
     assert saved_img.GetSpacing() == (1.0, 1.0, 1.0)
     assert saved_lbl.GetSpacing() == (1.0, 1.0, 1.0)
-    assert saved_img.GetSize() == saved_lbl.GetSize(), "CT e Mask don't have the same dimension!"
+    assert saved_img.GetSize() == expected_size     # (10*0.8/1.0 = 8, 10*0.8/1.0 = 8, 5*2.0/1.0 = 10)
+    assert saved_img.GetSize() == saved_lbl.GetSize(), "CT and Mask don't have the same dimension!"
 
-
-@patch('nsclc_survival.preprocessing.RTStructBuilder.create_from')
-def test_pipeline_missing_roi(mock_rt_builder, setup_mock_dataset):
+def test_pipeline_missing_roi(setup_mock_dataset, mocker):
     """
     Test that the patient is skipped if the target ROI (GTV-1) doesn't exist
     
@@ -121,10 +126,12 @@ def test_pipeline_missing_roi(mock_rt_builder, setup_mock_dataset):
     the pipeline skips processing for that patient and does not write any output files.
 
     Args:
-        mock_rt_builder (unittest.mock.MagicMock): Mocked RTStructBuilder creator.
         setup_mock_dataset (tuple): Tuple containing (organized_dir, preprocessed_dir, patient_id).
+        mocker (pytest_mock.plugin.MockerFixture): Pytest-mock fixture to patch internal objects.
     """
     organized_dir, preprocessed_dir, patient_id = setup_mock_dataset
+
+    mock_rt_builder = mocker.patch('nsclc_survival.preprocessing.RTStructBuilder.create_from')
     
     # Mocking of an rtstruct WITHOUT GTV-1
     mock_rtstruct_instance = MagicMock()
@@ -136,4 +143,5 @@ def test_pipeline_missing_roi(mock_rt_builder, setup_mock_dataset):
 
     # Verify nothing has been saved
     output_patient_dir = preprocessed_dir / patient_id / "label.nii.gz"
-    assert not output_patient_dir.exists(), "The file shouldn't have been created bacause the ROI was missing."
+    assert not output_patient_dir.exists(), "The file shouldn't have been created because the ROI was missing."
+
