@@ -145,3 +145,55 @@ def test_pipeline_missing_roi(setup_mock_dataset, mocker):
     output_patient_dir = preprocessed_dir / patient_id / "label.nii.gz"
     assert not output_patient_dir.exists(), "The file shouldn't have been created because the ROI was missing."
 
+def test_preprocessor_invalid_input_path():
+    """
+    Test that the preprocessor raises FileNotFoundError if input directory doesn't exist.
+    """
+    with pytest.raises(FileNotFoundError):
+        # Pass an invented path that doesn't exist
+        preprocessor = RadiomicsPreprocessor(Path("/invalid/path/input"), Path("/tmp/output"))
+        preprocessor.process_all_patients()
+
+def test_pipeline_mismatched_dimensions(setup_mock_dataset, mocker):
+    """
+    Test that ValueError is raised if CT and RTSTRUCT mask have different dimensions.
+
+    Args:
+        setup_mock_dataset (tuple): Tuple containing (organized_dir, preprocessed_dir, patient_id)
+            provided by the setup fixture.
+        mocker (pytest_mock.plugin.MockerFixture): Pytest-mock fixture to patch internal objects.
+    """
+    organized_dir, preprocessed_dir, patient_id = setup_mock_dataset
+
+    mock_get_dicoms = mocker.patch('nsclc_survival.preprocessing.sitk.ImageSeriesReader.GetGDCMSeriesFileNames')
+    mock_sitk_execute = mocker.patch('nsclc_survival.preprocessing.sitk.ImageSeriesReader.Execute')
+    mock_rt_builder = mocker.patch('nsclc_survival.preprocessing.RTStructBuilder.create_from')  
+    
+    # 1. Configure the CT with dimension 10x10x5
+    fake_ct = sitk.Image(10, 10, 5, sitk.sitkInt16)
+    fake_ct.SetSpacing([0.8, 0.8, 2.0])
+    fake_ct.SetOrigin([0.0, 0.0, 0.0])
+    mock_sitk_execute.return_value = fake_ct
+    mock_get_dicoms.return_value = ["fake_ct_slice1.dcm"]
+
+    # 2. Configure the mask with the WRONG dimension: 12x12x5 instead of 10x10x5
+    mock_rtstruct_instance = MagicMock()
+    mock_rtstruct_instance.get_roi_names.return_value = ["GTV-1"]
+    
+    # CREATE THE DISALIGNMENT: (12, 12, 5)
+    mismatched_mask_np = np.zeros((12, 12, 5), dtype=bool)
+    mock_rtstruct_instance.get_roi_mask_by_name.return_value = mismatched_mask_np
+    
+    mock_rt_builder.return_value = mock_rtstruct_instance
+
+    # 3. Execution with pytest.raises
+    preprocessor = RadiomicsPreprocessor(organized_dir, preprocessed_dir)
+    
+    # We expect the code notices the problem and return ValueError
+    with pytest.raises(ValueError) as exc_info:
+        preprocessor.process_all_patients()
+        
+    # Verify the error message
+    assert "dimension" in str(exc_info.value).lower() or "shape" in str(exc_info.value).lower()
+
+

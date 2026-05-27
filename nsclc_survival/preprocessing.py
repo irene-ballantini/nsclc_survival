@@ -100,6 +100,7 @@ class RadiomicsPreprocessor:
         
             # Extract the tumor mask 
             tumor_mask = rtstruct.get_roi_mask_by_name(roi_target)  
+            mask_shape = tumor_mask.shape
 
             # Verify the dimensions of the mask
             print(f"Shape of the mask: {tumor_mask.shape}") 
@@ -110,8 +111,16 @@ class RadiomicsPreprocessor:
             dicom_names = reader.GetGDCMSeriesFileNames(str(path_ct))
             reader.SetFileNames(dicom_names)
             ct_image = reader.Execute()
-
+            
+            ct_size = ct_image.GetSize()
             # Now the object ct_image "knows" the size of the voxels (e.g., 1mm x 1mm x 3mm)
+            # Safety Check
+            if mask_shape[0] != ct_size[1] or mask_shape[1] != ct_size[0] or mask_shape[2] != ct_size[2]:
+                # Solleviamo l'errore esplicitamente
+                raise ValueError(
+                    f"Mismatched dimensions for patient {patient_id}: "
+                    f"CT size is {ct_size}, but RTSTRUCT mask shape is {mask_shape}"
+                )
             
             # 1. Transform the tumor mask from numpy array to SimpleITK image
             tumor_mask_itk = self._numpy_to_itk(tumor_mask, ct_image)
@@ -131,6 +140,9 @@ class RadiomicsPreprocessor:
             sitk.WriteImage(mask_resampled, str(output_patient_dir / "label.nii.gz"))
 
             return patient_id
+        
+        except ValueError as e:
+            raise e
 
         except Exception as e:
             print(f"Skipping patient {patient_id} due to RTSTRUCT error: {e}")
