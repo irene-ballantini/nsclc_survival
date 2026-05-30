@@ -15,59 +15,71 @@ It also removes the original raw data folders after successful reorganization to
 
 import shutil
 import pydicom
-from settings import RAW_DATA_PATH, ORGANIZED_DATA_PATH
+from pathlib import Path
+from nsclc_survival.settings import RAW_DATA_PATH, ORGANIZED_DATA_PATH
 
-ORGANIZED_DATA_PATH.mkdir(parents=True, exist_ok=True)
+def organize_dicom_data(raw_path, organized_path):
+    """
+    Reads DICOM files from raw_path, extracts PatientID and Modality,
+    reorganizes them into organized_path/PatientID/Modality, and cleans up raw_path.
+    """
+    raw_path = Path(raw_path)
+    organized_path = Path(organized_path)
 
-# Check whether the raw data folder exists or has already been removed (e.g. if the script is run twice)
-if not RAW_DATA_PATH.exists():
-    print(f"raw folder not found: probably all files have already been moved and the raw folder removed.")
-    exit()
+    organized_path.mkdir(parents=True, exist_ok=True)
 
-all_folders = [f for f in RAW_DATA_PATH.iterdir() if f.is_dir()]
+    # Check whether the raw data folder exists or has already been removed (e.g. if the script is run twice)
+    if not raw_path.exists():
+        print(f"Warning: raw folder not found: probably all files have already been moved and the raw folder removed.")
+        return
 
-print(f"Analysing {len(all_folders)} folders in progress...")
+    all_folders = [f for f in raw_path.iterdir() if f.is_dir()]
 
-if len(all_folders) == 0:
-    print("All folders have already been moved!")
-else:
-    # Reorganization cycle
-    for folder_path in all_folders:
+    print(f"Analysing {len(all_folders)} folders in progress...")
+
+    if len(all_folders) == 0:
+        print("All folders have already been moved!")
+    else:
+        # Reorganization cycle
+        for folder_path in all_folders:
     
-        # Find .dcm files in the folder
-        files = list(folder_path.glob("*.dcm"))    
-        if files:
-            try:
-                # Read the first file to get metadata
-                sample_dcm = pydicom.dcmread(files[0])
+            # Find .dcm files in the folder
+            files = list(folder_path.glob("*.dcm"))    
+            if files:
+                try:
+                    # Read the first file to get metadata
+                    sample_dcm = pydicom.dcmread(files[0])
 
-                patient_id = sample_dcm.PatientID
-                modality = sample_dcm.Modality
-                # series_uid = sample_dcm.SeriesInstanceUID
+                    patient_id = sample_dcm.PatientID
+                    modality = sample_dcm.Modality
+                    # series_uid = sample_dcm.SeriesInstanceUID
 
-                # Create new folder name for the target directory
-                target_dir = ORGANIZED_DATA_PATH / patient_id / modality
-                target_dir.mkdir(parents=True, exist_ok=True)
+                    # Create new folder name for the target directory
+                    target_dir = organized_path / patient_id / modality
+                    target_dir.mkdir(parents=True, exist_ok=True)
 
-                # Move files to the new location
-                for f in files:
-                    shutil.move(str(f), str(target_dir / f.name))
+                    # Move files to the new location
+                    for f in files:
+                        shutil.move(str(f), str(target_dir / f.name))
 
-                print(f"Moved: {patient_id} - {modality}")
+                    print(f"Moved: {patient_id} - {modality}")
 
-            except Exception as e:
-                print(f"Error processing {folder_path}: {e}")
-                continue # if there's an error, don't delete the folder
+                except Exception as e:
+                    print(f"Error processing {folder_path}: {e}")
+                    continue # if there's an error, don't delete the folder
 
-        # Remove the original folder
-        shutil.rmtree(folder_path)
+            # Remove the original folder
+            shutil.rmtree(folder_path)
 
-    # Now remove also the raw folder
-    try:
-        shutil.rmtree(RAW_DATA_PATH)
-        print(f"\nSuccessfully removed the entire '{RAW_DATA_PATH}' folder.")
-    except Exception as e:
-        print(f"Could not remove folder {RAW_DATA_PATH}: {e}")
+        # Now remove also the raw folder
+        try:
+            shutil.rmtree(raw_path)
+            print(f"\nSuccessfully removed the entire '{raw_path}' folder.")
+        except Exception as e:
+            print(f"Could not remove folder {raw_path}: {e}")
         
 
-    print("\nDone! Now all data are organized in '../data/organized_data' folder divided per patient")
+    print(f"\nDone! Now all data are organized in '{organized_path}' folder divided per patient")
+
+if __name__ == "__main__":
+    organize_dicom_data(RAW_DATA_PATH, ORGANIZED_DATA_PATH)
