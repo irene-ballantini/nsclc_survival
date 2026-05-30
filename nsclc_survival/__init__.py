@@ -2,10 +2,18 @@
 # -*- coding: utf-8 -*-
 
 from .__version__ import __version__
+from .preprocessing import RadiomicsPreprocessor
+from .feature_extractor import FeatureExtractor
+from .nsclc_survival import RadiomicsClinicalDataProcessor
+from .nsclc_survival import LassoCoxModel
 
 __author__ = ['Irene Ballantini']
 __email__ = ['irene.ballantini@studio.unibo.it']
 
 __all__ = [
-	'__version__'
+	'__version__', 
+    'RadiomicsPreprocessor', 
+    'FeatureExtractor',
+    'RadiomicsClinicalDataProcessor', 
+    'LassoCoxModel'
 ]

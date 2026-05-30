@@ -3,17 +3,27 @@
 
 from pathlib import Path
 import pandas as pd
-from __version__ import __version__
-from preprocessing import RadiomicsPreprocessor
-from feature_extractor import FeatureExtractor
-from nsclc_survival import RadiomicsClinicalDataProcessor
-from nsclc_survival import LassoCoxModel
-from utils import save_features_to_csv
-from utils import plot_extreme_survival_curves, plot_deviance_residuals
-from settings import ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH
-from settings import RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES, PLOT_DEV_RESIDUALS
-from settings import patientID, survival_time_col, event_status_col, stage_col, gender_col, histology_col
-from settings import stage_mapping, gender_mapping
+
+from nsclc_survival import ( 
+    __version__, 
+    RadiomicsPreprocessor, 
+    FeatureExtractor, 
+    RadiomicsClinicalDataProcessor, 
+    LassoCoxModel
+    )
+
+from nsclc_survival.utils import (
+    save_features_to_csv, 
+    plot_extreme_survival_curves, 
+    plot_deviance_residuals
+)
+
+from nsclc_survival.settings import (
+    ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH, 
+    RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES, PLOT_DEV_RESIDUALS, 
+    patientID, survival_time_col, event_status_col, stage_col, gender_col, histology_col, 
+    stage_mapping, gender_mapping
+)
 
 def main (): 
     print(__version__) 
