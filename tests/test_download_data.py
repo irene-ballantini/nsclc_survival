@@ -3,17 +3,18 @@
 
 import pytest
 import pandas as pd
+from nsclc_survival._download_data import download_nsclc_radiomics_data
 from nsclc_survival.settings import COLLECTION_NAME, N_PATIENTS, patientID, modality, CT, RTSTRUCT
 
-def test_download_script_filtering(mocker):    
+def test_download_nsclc_radiomics_data_success(mocker):    
     """
     Test that the download filtering logic correctly identifies patients 
-    who have both CT and RTSTRUCT modalities, and safely limits the 
-    download list to N_PATIENTS.
+    who have both CT and RTSTRUCT modalities.
     """
     # 1. Mock tcia_utils functions to block the network calls
     mock_get_series = mocker.patch('tcia_utils.nbia.getSeries')
-    mocker.patch('tcia_utils.nbia.downloadSeries')      # to avoid downloading
+    mock_download = mocker.patch('tcia_utils.nbia.downloadSeries')      # to avoid downloading
+    mocker.patch('pathlib.Path.mkdir')
     
     # 2. Create a fake DataFrame of metadata 
     fake_metadata = pd.DataFrame([
@@ -25,34 +26,34 @@ def test_download_script_filtering(mocker):
     mock_get_series.return_value = fake_metadata
     
     # 3. Execute the filtering logic
-    patients_ct = set(fake_metadata[fake_metadata[modality] == CT][patientID])
-    patients_rt = set(fake_metadata[fake_metadata[modality] == RTSTRUCT][patientID])
-    valid_patients = sorted(list(patients_ct.intersection(patients_rt)))
+    download_nsclc_radiomics_data()
 
-    # --- Verify the ValueError check ---
+    assert mock_download.called
+
+    called_args = mock_download.call_args[0][0]
+    patient_ids_in_download = [record[patientID] for record in called_args]
+
+    # --- Verify the ValueError check wasn't triggered ---
     # In this test case valid_patients is NOT empty, so len() == 0 should be false
-    assert len(valid_patients) > 0
+    assert len(patient_ids_in_download) > 0
     
     # 4. Assert: the only valid patient should be PAT_001
-    assert valid_patients == ["PAT_001"]
-    assert "PAT_002" not in valid_patients
-    assert "PAT_003" not in valid_patients
+    assert "PAT_001" in patient_ids_in_download
+    assert "PAT_002" not in patient_ids_in_download
+    assert "PAT_003" not in patient_ids_in_download
 
-    # --- Verify the subset logic (if/else) ---
-    if len(valid_patients) < N_PATIENTS:
-        actual_download_count = len(valid_patients)
-    else:
-        actual_download_count = N_PATIENTS
-        
-    assert actual_download_count == 1  # Since we only have 1 valid patient in mock data
+    # --- Verify the subset logic ---
+    unique_patients_downloaded = len(set(patient_ids_in_download))
+    assert unique_patients_downloaded == 1  # Since we only have 1 valid patient in mock data
 
-def test_download_script_raises_value_error_when_empty(mocker):
+def test_download_nsclc_radiomics_data_raises_value_error(mocker):
     """
-    Test that the download script raises a ValueError if no patients match 
+    Test that download_nsclc_radiomics_data raises a ValueError if no patients match 
     both CT and RTSTRUCT modalities.
     """
     mock_get_series = mocker.patch('tcia_utils.nbia.getSeries')
     mocker.patch('tcia_utils.nbia.downloadSeries')
+    mocker.patch('pathlib.Path.mkdir')
     
     # Create empty metadata or data that doesn't intersect
     fake_metadata = pd.DataFrame([
@@ -61,15 +62,9 @@ def test_download_script_raises_value_error_when_empty(mocker):
     ])
     mock_get_series.return_value = fake_metadata
     
-    # Replicate logic to ensure it triggers the same exception condition
-    patients_ct = set(fake_metadata[fake_metadata[modality] == CT][patientID])
-    patients_rt = set(fake_metadata[fake_metadata[modality] == RTSTRUCT][patientID])
-    valid_patients = sorted(list(patients_ct.intersection(patients_rt)))
-    
-    # Verify that the logic accurately raises the ValueError when len is 0
+    # Verify that the logic accurately raises the ValueError 
     with pytest.raises(ValueError) as exc_info:
-        if len(valid_patients) == 0:
-            raise ValueError(f"Error: No patients found with both {CT} and {RTSTRUCT} in '{COLLECTION_NAME}'.")
-            
+        download_nsclc_radiomics_data()
+    
     assert "no patients found" in str(exc_info.value).lower()
     
