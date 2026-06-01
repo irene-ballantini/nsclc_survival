@@ -12,6 +12,9 @@ from nsclc_survival import (
     LassoCoxModel
     )
 
+from nsclc_survival._download_data import download_nsclc_radiomics_data
+from nsclc_survival._organize_data import organize_dicom_data
+
 from nsclc_survival.utils import (
     save_features_to_csv, 
     plot_extreme_survival_curves, 
@@ -19,7 +22,7 @@ from nsclc_survival.utils import (
 )
 
 from nsclc_survival.settings import (
-    ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH, 
+    RAW_DATA_PATH, ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH, 
     RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES, PLOT_DEV_RESIDUALS, 
     patientID, survival_time_col, event_status_col, stage_col, gender_col, histology_col, 
     stage_mapping, gender_mapping
@@ -27,6 +30,12 @@ from nsclc_survival.settings import (
 
 def main (): 
     print(__version__) 
+
+     # Download and organize data (if data not already available locally and organized, otherwise it will skip these steps)
+    create_setup = not (ORGANIZED_DATA_PATH.exists() and any(ORGANIZED_DATA_PATH.iterdir())) 
+    if create_setup:
+        download_nsclc_radiomics_data()
+        organize_dicom_data(raw_path=RAW_DATA_PATH, organized_path=ORGANIZED_DATA_PATH)
     
     print("\n" + "#"*50)
     print(" 1. RUNNING RADIOMICS PREPROCESSING ".center(50, "#"))
