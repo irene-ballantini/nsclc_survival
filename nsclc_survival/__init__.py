@@ -6,6 +6,7 @@ from .preprocessing import RadiomicsPreprocessor
 from .feature_extractor import FeatureExtractor
 from .nsclc_survival import RadiomicsClinicalDataProcessor
 from .nsclc_survival import LassoCoxModel
+from .nsclc_survival import DeepCoxModel
 
 __author__ = ['Irene Ballantini']
 __email__ = ['irene.ballantini@studio.unibo.it']
@@ -15,5 +16,6 @@ __all__ = [
     'RadiomicsPreprocessor', 
     'FeatureExtractor',
     'RadiomicsClinicalDataProcessor', 
-    'LassoCoxModel'
+    'LassoCoxModel', 
+    'DeepCoxModel'
 ]

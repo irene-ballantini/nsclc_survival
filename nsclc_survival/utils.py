@@ -149,4 +149,4 @@ def plot_deviance_residuals(df_risk_residuals, output_path):
     
     if output_path:
         plt.savefig(output_path, dpi=300)
-        print(f"[*] Residuals diagnostic plot saved to: {output_path}")
+        print(f"[INFO] Residuals diagnostic plot saved to: {output_path}")
