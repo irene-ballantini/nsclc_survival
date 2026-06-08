@@ -857,8 +857,8 @@ class DeepCoxModel:
         network (DeepCoxNetwork): The neural network architecture for Deep Cox regression.
         criterion (NegativeLogLikelihoodLoss): The loss function used for training.
         optimizer (torch.optim.Optimizer): The optimizer used to update the model weights during training.
-        unique_times_ (numpy.ndarray or None): Unique survival times from the training data, used for baseline hazard calculation.
-        baseline_cumulative_hazard_ (numpy.ndarray or None): Baseline cumulative hazard values corresponding to unique_times_.
+        `unique_times_` (numpy.ndarray or None): Unique survival times from the training data, used for baseline hazard calculation.
+        `baseline_cumulative_hazard_` (numpy.ndarray or None): Baseline cumulative hazard values corresponding to `unique_times_`.
         predicted_medians_d (numpy.ndarray or None): 1D array of predicted median survival times in days. 
             Populated after running predict_survival_time().
         predicted_medians_m (numpy.ndarray or None): 1D array of predicted median survival times in months. 
@@ -1475,7 +1475,7 @@ class SurvivalRiskClassifier:
             predicted_time (array-like): Survival times predicted by the model.
             y_pred_class (np.ndarray): Binary array of the predicted classes (0 or 1).
             risk_scores_test (array-like): Risk score computed on test dataset.
-            
+
         Returns:
             pd.DataFrame: Final Report sorted from the highest risk to the lowest risk patient. 
         """                 

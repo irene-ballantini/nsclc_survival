@@ -15,3 +15,12 @@ This documentation provides an overview of the project, its structure, and how t
    :maxdepth: 2
    :caption: Contents:
 
+   API/modules
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
+
