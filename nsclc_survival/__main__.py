@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import argparse
+import logging
 from pathlib import Path
 import pandas as pd
 
@@ -10,7 +12,8 @@ from nsclc_survival import (
     FeatureExtractor, 
     RadiomicsClinicalDataProcessor, 
     LassoCoxModel,
-    DeepCoxModel
+    DeepCoxModel, 
+    SurvivalRiskClassifier
     )
 
 from nsclc_survival._download_data import download_nsclc_radiomics_data
@@ -19,29 +22,55 @@ from nsclc_survival._organize_data import organize_dicom_data
 from nsclc_survival.utils import (
     save_features_to_csv, 
     plot_extreme_survival_curves, 
-    plot_deviance_residuals
+    plot_deviance_residuals, 
+    kaplan_meier_plot
 )
 
 from nsclc_survival.settings import (
     RAW_DATA_PATH, ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH, 
     RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES, PLOT_DEV_RESIDUALS, 
-    PLOT_DEEP_DEV_RESIDUALS, PLOT_DEEP_SURVIVAL_CURVES,
+    PLOT_DEEP_DEV_RESIDUALS, PLOT_DEEP_SURVIVAL_CURVES, PLOT_PATH,
     patientID, survival_time_col, event_status_col, stage_col, gender_col, histology_col, 
     stage_mapping, gender_mapping
 )
 
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(message)s', 
+    force=True
+)
+logger = logging.getLogger(__name__)
+
+#logging.basicConfig(level=logging.INFO, format='%(message)s')
+#logger = logging.getLogger(__name__)
+
+def parse_args():
+    """
+    To change parameters from the terminal
+
+    Returns:
+        _type_: _description_
+    """
+    parser = argparse.ArgumentParser(description="NSCLC Survival Analysis Pipeline")
+    parser.add_argument("--cv-folds", type=int, default=5, help="Folds for the Lasso Cross-Validation")
+    parser.add_argument("--epochs", type=int, default=130, help="Epochs of training for Deep Cox")
+    #parser.add_argument("--skip-extraction", action="store_true", help="Salta l'estrazione dei feature radiomici")
+    return parser.parse_args()
+
 def main (): 
-    print(__version__) 
+    args = parse_args()
+    logger.info(f"Package version: {__version__}")
 
      # Download and organize data (if data not already available locally and organized, otherwise it will skip these steps)
     create_setup = not (ORGANIZED_DATA_PATH.exists() and any(ORGANIZED_DATA_PATH.iterdir())) 
     if create_setup:
+        logger.info("[INFO] Download and organization of DICOM data in progress...")
         download_nsclc_radiomics_data()
         organize_dicom_data(raw_path=RAW_DATA_PATH, organized_path=ORGANIZED_DATA_PATH)
     
-    print("\n" + "="*100)
-    print(" 1. RUNNING RADIOMICS PREPROCESSING ".center(100, " "))
-    print("="*100)
+    logger.info("\n" + "="*100)
+    logger.info(" 1. RUNNING RADIOMICS PREPROCESSING ".center(100, " "))
+    logger.info("="*100)
 
     processor = RadiomicsPreprocessor(
         organized_path=ORGANIZED_DATA_PATH, 
@@ -218,7 +247,7 @@ def main ():
     
     print("\n--- DEEP COX STEP 4: SURVIVAL MONTHS PREDICTION ---")
     print(f"[INFO] Predicting survival time for the test set using the trained Deep Cox model...")
-    deep_pred_d, deep_pred_m, deep_survival_curves = deep_cox.predict_survival_time(
+    deep_pred_days, deep_pred_months, deep_survival_curves = deep_cox.predict_survival_time(
         X_test=X_test, 
         risk_scores=deep_risk_scores, 
         hazards=deep_hazards
@@ -281,7 +310,82 @@ def main ():
         print(deep_best[col].head(5).to_string(index=False))
 
     print("\n[SUCCESS] Deep Cox Model Elaboration completed!")
+
+    print("\n" + "=" * 100)
+    print(" RISK CLASSIFICATION - LASSO-COX MODEL".center(100, " "))
+    print("=" * 100)
+
+    classifier_cox = SurvivalRiskClassifier(trained_model=lasso_cox)
+    classifier_cox.fit_threshold(X_train)
+    y_pred_cox_classes = classifier_cox.predict_risk_class(risk_scores=risk_scores)
+    p_value_cox = classifier_cox.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_cox_classes, title_suffix="Lasso-Cox")
     
+    kaplan_meier_plot(
+    y_test=y_test,
+    pred_classes=y_pred_cox_classes,
+    logrank_p_value=p_value_cox,
+    title_suffix="Cox",
+    output_path=PLOT_PATH / "KM_popolazione_cox.png"
+)
+
+    print("--- CLASSIFICATION REPORT COX---")
+    matrix = classifier_cox.compute_classification_report(
+    y_test=y_test, 
+    y_train=y_train, 
+    y_pred_class=y_pred_cox_classes
+    )
+    
+    print("--- PREDICTION REPORT COX ---")
+    df_patients_class_cox = classifier_cox.generate_prediction_report(
+        patient_ids=data_processor.patient_ids_test, 
+        y_test=y_test, 
+        predicted_time=pred_days,
+        y_pred_class=y_pred_cox_classes,
+        risk_scores_test=risk_scores
+        )
+    
+    cox_class_dir = output_directory / "classes_cox.csv"
+    df_patients_class_cox.to_csv(cox_class_dir, index=False, float_format="%.4f")
+    print(f"[INFO] Classification Cox predictions saved in {cox_class_dir}")
+
+    print("\n" + "=" * 100)
+    print(" RISK CLASSIFICATION - DEEP COX MODEL".center(100, " "))
+    print("=" * 100)
+
+    classifier_deep = SurvivalRiskClassifier(trained_model=deep_cox)
+    classifier_deep.fit_threshold(X_train)
+    y_pred_deep_classes = classifier_deep.predict_risk_class(risk_scores=deep_risk_scores)
+    p_value_deep = classifier_deep.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_deep_classes, title_suffix="DeepCox")
+    
+    kaplan_meier_plot(
+    y_test=y_test,
+    pred_classes=y_pred_deep_classes,
+    logrank_p_value=p_value_deep,
+    title_suffix="DeepCox",
+    output_path=PLOT_PATH / "KM_popolazione_deepcox.png"
+)
+
+    print("--- CLASSIFICATION REPORT DEEP COX ---")
+    matrix = classifier_deep.compute_classification_report(
+    y_test=y_test, 
+    y_train=y_train, 
+    y_pred_class=y_pred_deep_classes
+    )
+    
+    print("--- PREDICTION REPORT DEEP COX ---")
+    df_patients_class_deep = classifier_deep.generate_prediction_report(
+        patient_ids=data_processor.patient_ids_test, 
+        y_test=y_test, 
+        predicted_time=deep_pred_days,
+        y_pred_class=y_pred_deep_classes,
+        risk_scores_test=deep_risk_scores
+        )
+    
+    deep_cox_class_dir = output_directory / "classes_deep_cox.csv"
+    df_patients_class_deep.to_csv(deep_cox_class_dir, index=False, float_format="%.4f")
+    print(f"[INFO] Classification Deep Cox predictions saved in {deep_cox_class_dir}")
+
+
     print("\n" + "=" * 100)
     print("\nPipeline executed successfully!")
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from lifelines import KaplanMeierFitter
 
 def save_features_to_csv(features_list, output_path):
     """
@@ -150,3 +151,46 @@ def plot_deviance_residuals(df_risk_residuals, output_path):
     if output_path:
         plt.savefig(output_path, dpi=300)
         print(f"[INFO] Residuals diagnostic plot saved to: {output_path}")
+
+def kaplan_meier_plot(y_test, pred_classes, logrank_p_value, output_path, title_suffix="DeepCox"):
+    """_summary_
+
+    Args:
+        y_test (_type_): _description_
+        pred_classes (_type_): _description_
+        logrank_p_value (_type_): _description_
+        output_path (_type_): _description_
+        title_suffix (str, optional): _description_. Defaults to "DeepCox".
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    times_test = y_test['Survival_Time']
+    events_test = y_test['Event_Status'].astype(int)
+    
+    idx_low = (pred_classes == 0)
+    idx_high = (pred_classes == 1)
+    
+    kmf_low = KaplanMeierFitter()
+    kmf_high = KaplanMeierFitter()
+    
+    plt.figure(figsize=(8, 5))
+    
+    # Low Risk Curve
+    kmf_low.fit(times_test[idx_low], event_observed=events_test[idx_low], 
+                label=f'Low Risk (n={np.sum(idx_low)})')
+    kmf_low.plot_survival_function(ci_show=True, color='tab:blue')
+    
+    # High Risk Curve
+    kmf_high.fit(times_test[idx_high], event_observed=events_test[idx_high], 
+                 label=f'High Risk (n={np.sum(idx_high)})')
+    kmf_high.plot_survival_function(ci_show=True, color='tab:red')
+    
+    plt.title(f'Stratification of the Population ({title_suffix})\nLog-Rank p-value: {logrank_p_value:.5f}')
+    plt.xlabel('Survival Time (Days)')
+    plt.ylabel('Survival Probability')
+    plt.ylim(0, 1.02)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend(loc="best")
+    
+    plt.savefig(output_path)
+    #plt.show()
