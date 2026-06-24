@@ -21,6 +21,7 @@ from nsclc_survival._organize_data import organize_dicom_data
 
 from nsclc_survival.utils import (
     save_features_to_csv, 
+    plot_loss_funct,
     plot_extreme_survival_curves, 
     plot_deviance_residuals, 
     kaplan_meier_plot
@@ -102,10 +103,6 @@ def main ():
     # Load and merge data
     df_merged = data_processor.load_and_merge(patientID, stage_col, gender_col, histology_col, stage_mapping, gender_mapping)
     
-    print("\n" + "=" * 100)
-    print(" MODEL 1: LASSO-COX MODEL".center(100, " "))
-    print("=" * 100)
-
     # Split and standardize data
     X_train, X_test, y_train, y_test = data_processor.split_and_standardize(
         patientID = patientID,
@@ -114,6 +111,10 @@ def main ():
         train_size=0.8,
         random_seed=42
     )
+
+    print("\n" + "=" * 100)
+    print(" MODEL 1: LASSO-COX MODEL".center(100, " "))
+    print("=" * 100)
 
     print("\n--- COX STEP 1: TRAINING LASSO-COX MODEL WITH CROSS-VALIDATION ---")
     # Initialize the Lasso-Cox model
@@ -229,12 +230,15 @@ def main ():
     deep_cox = DeepCoxModel(
         input_dim=input_dimension, 
         hidden_dims=[4], 
-        dropout_rate=0.4, 
+        dropout_rate=0.1, 
         lr=5e-4, 
-        weight_decay=5e-1
+        weight_decay=1e-4
     )  
 
-    deep_cox.fit(X_train, y_train, epochs=130, batch_size=64)
+    deep_cox.fit(X_train, y_train, epochs=170, batch_size=32)
+    
+    loss_funct_path = PLOT_PATH / "deep_cox_loss_curve.png"
+    plot_loss_funct(deep_cox.loss_history, loss_funct_path)
 
     print("\n--- DEEP COX STEP 2: RISK SCORES ---")
     print(f"[INFO] Computing risk scores and hazards for the test set using the trained Deep Cox model...")
@@ -290,7 +294,7 @@ def main ():
     # Save the diagnostic residuals of Deep Cox to a CSV file
     if df_deep_residuals is not None:
         deep_residuals_path = output_directory / "deep_cox_martingale_deviance_residuals.csv"
-        df_deep_residuals.to_csv(deep_residuals_path, index=False, float_format="%.4f")
+        df_deep_residuals.to_csv(deep_residuals_path, index=False, float_format="%.2f")
         print(f"[INFO] Diagnostic residuals of Deep Cox saved in: {deep_residuals_path}")
         print(f"\n--- DEEP COX STEP 9: DEEP COX PLOTTING RESIDUALS DIAGNOSTICS")
         plot_deviance_residuals(
@@ -366,13 +370,13 @@ def main ():
 )
 
     print("--- CLASSIFICATION REPORT DEEP COX ---")
-    matrix = classifier_deep.compute_classification_report(
+    classifier_deep.compute_classification_report(
     y_test=y_test, 
     y_train=y_train, 
     y_pred_class=y_pred_deep_classes
     )
     
-    print("--- PREDICTION REPORT DEEP COX ---")
+    print("\n--- PREDICTION REPORT DEEP COX ---")
     df_patients_class_deep = classifier_deep.generate_prediction_report(
         patient_ids=data_processor.patient_ids_test, 
         y_test=y_test, 

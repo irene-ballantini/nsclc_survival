@@ -194,3 +194,21 @@ def kaplan_meier_plot(y_test, pred_classes, logrank_p_value, output_path, title_
     
     plt.savefig(output_path)
     #plt.show()
+
+def plot_loss_funct(loss_history, output_path):
+    """
+    Plot the trend of the loss function
+
+    Args:
+        loss_history (list): list containing loss function values across the epochs
+        output_path (Path): Saving path
+    """
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(1, len(loss_history) + 1), loss_history, color='#1f77b4', linewidth=2, label='Training Loss')
+    plt.title('Deep Cox Model - Training Loss Curve', fontsize=14, fontweight='bold')
+    plt.xlabel('Epochs', fontsize=12)
+    plt.ylabel('Negative Log-Likelihood Loss', fontsize=12) 
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(fontsize=11)
+
+    plt.savefig(output_path)

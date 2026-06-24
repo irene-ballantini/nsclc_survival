@@ -20,6 +20,9 @@ class RadiomicsPreprocessor:
         self.preprocessed_path.mkdir(parents=True, exist_ok=True)
 
     def process_all_patients(self):
+        """
+        Process all the patients calling the method process_patient().
+        """
         patient_folders = sorted([f for f in self.organized_path.iterdir() if f.is_dir()])
         print(f"Found {len(patient_folders)} patients.")
 

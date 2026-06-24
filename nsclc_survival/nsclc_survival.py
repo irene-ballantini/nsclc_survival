@@ -321,7 +321,7 @@ class LassoCoxModel:
         std_best_score = cv_results['std_test_score'][best_index]    # local test fold result of CV
         
         print(f"Optimization completed. Best Alpha: {self.best_alpha:.6f}" )
-        print(f"(Mean Validation C-index: {mean_best_score:.4f} \u00B1 {std_best_score:.4f})")
+        print(f"(Mean Validation C-index on the Training Set: {mean_best_score:.4f} \u00B1 {std_best_score:.4f})")
         
         # Train the final model
         self.model = CoxnetSurvivalAnalysis(
@@ -863,6 +863,7 @@ class DeepCoxModel:
             Populated after running predict_survival_time().
         predicted_medians_m (numpy.ndarray or None): 1D array of predicted median survival times in months. 
             Populated after running predict_survival_time().
+        loss_history = list of the loss function values across the epochs
     
     """
     def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.2, lr=1e-4, weight_decay=1e-4, seed=42):
@@ -936,6 +937,8 @@ class DeepCoxModel:
         # since partial Cox loss benefits from seeing the entire time spectrum of patients.
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         
+        self.loss_history = []
+
         self.network.train()
         for epoch in range(epochs):
             epoch_loss = 0
@@ -949,9 +952,12 @@ class DeepCoxModel:
                 # After that risk scores are overwritten and so discarded.  
                 self.optimizer.step()
                 epoch_loss += loss.item()
+
+            avg_epoch_loss = epoch_loss / len(dataloader)
+            self.loss_history.append(avg_epoch_loss)
                 
             if verbose and (epoch + 1) % 10 == 0:
-                print(f"Epoch {epoch+1}/{epochs} - Loss: {epoch_loss/len(dataloader):.4f}")
+                print(f"Epoch {epoch+1}/{epochs} - Loss: {avg_epoch_loss:.4f}")
 
         if verbose:
             print("[INFO] Training complete. Computing Breslow baseline hazard...")
@@ -1397,7 +1403,7 @@ class SurvivalRiskClassifier:
     
     def evaluate_stratification(self, y_test, y_pred_class, title_suffix):
         """
-        Evaluate the statistical significancy of the separation using the Log-Rank test.
+        Evaluate the statistical significance of the separation using the Log-Rank test.
 
         Args:
             y_test (pd.DataFrame or dict): Test target containg the columns 
@@ -1463,7 +1469,13 @@ class SurvivalRiskClassifier:
         print("\nClassification Report (only patients with observed event):")
         print(classification_report(y_true_class, y_pred_filtered, target_names=['Low Risk', 'High Risk']))
         
-        return confusion_matrix(y_true_class, y_pred_filtered)
+        conf_matrix = confusion_matrix(y_true_class, y_pred_filtered)
+
+        print("\nConfusion Matrix:")
+        print(conf_matrix)
+
+        return conf_matrix
+     
 
     def generate_prediction_report(self, patient_ids, y_test, predicted_time, y_pred_class, risk_scores_test):
         """
