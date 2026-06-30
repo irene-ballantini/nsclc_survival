@@ -104,7 +104,7 @@ def main ():
     df_merged = data_processor.load_and_merge(patientID, stage_col, gender_col, histology_col, stage_mapping, gender_mapping)
     
     # Split and standardize data
-    X_train, X_test, y_train, y_test = data_processor.split_and_standardize(
+    X_total, y_total, X_train, X_test, y_train, y_test = data_processor.split_and_standardize(
         patientID = patientID,
         survival_time_col=survival_time_col,
         event_status_col=event_status_col,
@@ -127,7 +127,7 @@ def main ():
     
     # Execute Cross-Validation to find the optimal alpha and train the final model
     # You can change the number of folds by modifying cv (e.g., cv=5)
-    lasso_cox.fit_crossval(X_train, y_train, cv=5)
+    lasso_cox.fit_crossval(X_train, y_train, X_total, y_total, cv=5)
 
     print("\n--- COX STEP 2: EXTRACTING SELECTED RADIOMIC FEATURES ---")
     # Get the DataFrame with only the features selected by LASSO (with coefficients and Hazard Ratio)

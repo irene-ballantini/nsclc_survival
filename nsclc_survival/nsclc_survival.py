@@ -5,9 +5,10 @@ import pandas as pd
 import numpy as np
 import warnings
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.model_selection import train_test_split, GroupShuffleSplit, GridSearchCV, RepeatedKFold
+from sklearn.model_selection import train_test_split, cross_validate, GroupShuffleSplit, GridSearchCV, RepeatedKFold
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 from sksurv.linear_model import CoxnetSurvivalAnalysis
 from sksurv.metrics import concordance_index_censored
 from sksurv.metrics import integrated_brier_score
@@ -124,9 +125,12 @@ class RadiomicsClinicalDataProcessor:
                 this method.
 
         Returns:
-            tuple: A tuple containing four elements:
-                - X_train (numpy.ndarray): Scaled training feature matrix.
-                - X_test (numpy.ndarray): Scaled testing feature matrix.
+            tuple: A tuple containing six elements:
+                - X (numpy.ndarray): Complete, un-split, and un-scaled raw feature matrix
+                - y (numpy.ndarray): Complete structured array containing 'Event_Status' 
+                  and 'Survival_Time' corresponding to X_total.
+                - X_train (numpy.ndarray): Scaled and imputed training feature matrix.
+                - X_test (numpy.ndarray): Scaled and imputed testing feature matrix.
                 - y_train (numpy.ndarray): Structured array of training targets.
                 - y_test (numpy.ndarray): Structured array of testing targets.
         """
@@ -205,7 +209,7 @@ class RadiomicsClinicalDataProcessor:
         self.feature_names = X.columns.tolist()
         
         print(f"Split completed. Train size: {self.X_train.shape[0]}, Test size: {self.X_test.shape[0]}")
-        return self.X_train, self.X_test, self.y_train, self.y_test
+        return X, y, self.X_train, self.X_test, self.y_train, self.y_test
     
 # ==========================================
 # 2. MODEL CLASS: LASSO-COX
@@ -242,10 +246,17 @@ class LassoCoxModel:
         self.predicted_medians_d = None
         self.predicted_medians_m = None
 
-    def fit_crossval(self, X_train, y_train, cv=5, n_repeats=3, alpha_param_grid=None):     
+    def fit_crossval(self, X_train, y_train, X_total, y_total, cv=5, n_repeats=3, alpha_param_grid=None):     
         """
-        Optimizes the alpha hyperparameter using Repeated K-Fold Cross-Validation 
-        and GridSearchCV, then trains the final LASSO-Cox model on the entire training set.
+        Executes a Nested Repeated Cross-Validation to validate the pipeline and optimizes 
+        the alpha hyperparameter to train the definitive LASSO-Cox model.
+
+        This method operates in two distinct phases:
+        1. It performs a Nested Cross-Validation (Outer Loop for model validation and Inner Loop 
+           for hyperparameter optimization) on the raw total data to compute an unbiased estimate 
+           of the protocol's generalization capability (C-index).
+        2. It executes a standard GridSearchCV on the static training set to extract the definitive 
+           optimal alpha penalty and fits the final prognostic model.
 
         The optimization maximizes Harrell's Concordance Index (C-index). Clinical variables 
         are protected from the LASSO penalty using custom penalty factors, ensuring they are 
@@ -256,6 +267,11 @@ class LassoCoxModel:
                 (n_samples, n_features).
             y_train (numpy.ndarray): NumPy structured array containing the survival target 
                 with two fields: 'Event_Status' (bool) and 'Survival_Time' (float).
+            X_total : numpy.ndarray or pandas.DataFrame
+                The complete, un-split raw dataset used by the Outer Loop of the Nested CV 
+                to dynamically simulate imputation, scaling, and training fold-by-fold.
+            y_total : numpy.ndarray (structured)
+                Structured target array containing 'Event_Status' and 'Survival_Time' for X_total.
             cv (int, optional): Number of folds for the K-Fold Cross-Validation. 
                 Defaults to 5.
             n_repeats (int, optional): Number of times Cross-Validation is repeated 
@@ -298,16 +314,57 @@ class LassoCoxModel:
             penalty_factor=penalty_factors
         )
 
-        cv_strategy = RepeatedKFold(n_splits=cv, n_repeats=n_repeats, random_state=42)
+        # Outer Loop for model validation
+        cv_strategy_out = RepeatedKFold(n_splits=cv, n_repeats=n_repeats, random_state=100)
+
+        print("\nExecution of the Nested Cross-Validation (Repeated) on Raw Data...")
+    
+        # Create a pipeline: data are imputed and scaled FOLD BY FOLD in automatically
+        nested_pipeline = Pipeline([
+            ('imputer', SimpleImputer(strategy='median')),
+            ('scaler', StandardScaler()),
+            ('cox', base_estimator)
+        ])
+    
+        # Map alpha grid specifying it belongs to the step 'cox' of the pipeline
+        pipeline_param_grid = {"cox__alphas": alpha_param_grid["alphas"]}
+    
+        # Inner Loop for the alpha optimization
+        cv_strategy_in = RepeatedKFold(n_splits=cv, n_repeats=n_repeats, random_state=42)
+       
+        gcv_nested = GridSearchCV(
+            estimator=nested_pipeline,
+            param_grid=pipeline_param_grid,
+            cv=cv_strategy_in,
+            error_score=0.5
+        )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            #cross_validate returns a dictionary 
+            nested_results = cross_validate(
+                estimator=gcv_nested,           
+                X=X_total,          # Pass raw data
+                y=y_total, 
+                cv=cv_strategy_out,
+                scoring=None,            
+                return_train_score=True, 
+                n_jobs=-1
+            )
+
+        nested_c_index_media = np.mean(nested_results['test_score'])   # 'test_score' is a key of the dictionary generated
+        nested_c_index_std = np.std(nested_results['test_score'])
+        print(f"--> NESTED CV COMPLETE: {nested_c_index_media:.4f} ± {nested_c_index_std:.4f}\n")
         
+        print("Extraction of the optimal alpha...")
         # Use GridSearchCV 
         gcv = GridSearchCV(
             estimator=base_estimator,
             param_grid=alpha_param_grid,
-            cv=cv_strategy,
+            cv=cv_strategy_in,
             error_score=0.5 # If a fold fails, it assigns the pure chance C-index (0.5)
         )
-        
+      
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=ConvergenceWarning)
             warnings.filterwarnings("ignore", message=".*all coefficients are zero.*")
