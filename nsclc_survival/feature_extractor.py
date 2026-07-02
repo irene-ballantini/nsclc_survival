@@ -3,15 +3,23 @@
 
 from pathlib import Path
 import time
+import logging
 from radiomics import featureextractor
 
 class FeatureExtractor:
     """ 
     Class to extract radiomics features from preprocessed images and masks using PyRadiomics.
+
+    Attributes:
+        config_path (Path): Path to the pyradiomics_config.yaml file.
+        extractor (RadiomicsFeatureExtractor): An instance of the PyRadiomics feature extractor.
     """
     def __init__(self, config_path):
 
         self.config_path = Path(config_path)
+
+        logger = logging.getLogger("radiomics")
+        logger.setLevel(logging.ERROR)
 
         if self.config_path.exists():
             self.extractor = featureextractor.RadiomicsFeatureExtractor(str(self.config_path))
@@ -27,7 +35,13 @@ class FeatureExtractor:
         Extract features from all patients in the directory.
 
         Returns:
-            list of dict: A list where each element is a dictionary of features for a single patient.
+            list of dict: A list where each element is a dictionary of extracted features 
+                for a single patient. 
+
+                Each dictionary contains:
+                    - "PatientID" (str): The unique identifier of the patient.
+                    - Pyradiomics feature names (str): The calculated radiomics 
+                      features with their corresponding values
         """
         preprocessed_path = Path(preprocessed_path)
         patient_folders = sorted([f for f in preprocessed_path.iterdir() if f.is_dir()])
@@ -53,7 +67,7 @@ class FeatureExtractor:
                 
                 # Calculate duration time for this patient 
                 patient_duration = time.time() - start_patient_time
-                print(f"--> Done in {patient_duration:.2f} seconds.")
+                print(f"--> Done in {patient_duration:.2f} seconds.\n")
 
             except Exception as e:
                 print(f"[ERROR] {patient_id}: {e}")
