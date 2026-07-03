@@ -1445,10 +1445,7 @@ class SurvivalRiskClassifier:
         """
         if self.threshold_ is None:
             raise ValueError("Threshold not computed. Execute fit_threshold(X_train) first.")
-        
-        #if self.test_predicted_classes_ is not None:
-         #   return self.test_predicted_classes_
-
+                
         if risk_scores is None:
             if X_input is None:
                 raise ValueError("Provide 'X_input' or 'risk_scores' first.")
