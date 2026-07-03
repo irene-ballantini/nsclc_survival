@@ -1,0 +1,80 @@
+[project]
+name = "nsclc_survival"
+version = "0.0.1"
+authors = [
+  { name = "Irene Ballantini", email = "irene.ballantini@studio.unibo.it" },
+]
+description = "NSCLC Radiomics: Survival Time prediction using CT-extracted features and clinical data."
+readme = "README.md"
+requires-python = ">=3.8, <3.11"
+license = { text = "MIT" }
+keywords = [
+  "radiomics",
+  "survival-analysis",
+  "nsclc",
+  "deep-learning", 
+  "lasso-cox-model", 
+  "deep-cox-model", 
+  "risk_classification", 
+  "survival-time-prediction", 
+  "ct-images"
+]
+classifiers = [
+  "Natural Language :: English",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy"
+]
+
+dependencies = [
+  # Medical Image e DICOM Handling
+  "pydicom",
+  "rt-utils",
+  "SimpleITK",
+  "tcia-utils",
+  # Data Science & Machine Learning
+  "numpy>=1.22",
+  "pandas",
+  "scikit-learn",
+  # Survival Analysis
+  "lifelines",
+  "scikit-survival",
+  # Deep Learning (PyTorch)
+  "torch",
+  # Feature Extraction (Radiomics)
+  "pyradiomics",
+  # Data visualization
+  "matplotlib",
+  # YAML Handling
+  "ruamel.yaml",
+]
+
+[project.scripts]
+nsclc_survival = "nsclc_survival.__main__:main"
+
+[project.optional-dependencies]
+dev = [
+  "flake8",
+  "pytest",
+  "codecov",
+  "pytest-cov",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/irene-ballantini/nsclc_survival"
+
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel",
+    "numpy>=1.22"  
+]
+build-backend = "setuptools.build_meta"
