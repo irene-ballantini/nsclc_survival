@@ -32,7 +32,7 @@ $$
 2. **Hazard Function**: it describes  the instantaneous hazard rate over time, which represents the rate of occurence of the event during an infinitesimally small time interval. Its value is not a probability, but an indicator of the risk of experiencing the event. It  is linked to the probability of an individual dying at time $t$ given that he or she has survived up to that point, and can be defined as follows: 
 
 $$
-\lambda(t) = \lim_{\delta\rightarrow0} \frac{\Pr(t\le T<t+\delta|T\ge t)}{\delta}
+\lambda(t) = \lim_{\delta \to 0} \frac{1}{\delta} \Pr(t \le T < t + \delta \mid T \ge t)
 $$ 
 
 ## Proportional Hazards Models
