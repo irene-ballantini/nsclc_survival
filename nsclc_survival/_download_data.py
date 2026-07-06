@@ -9,16 +9,19 @@ Module for downloading NSCLC-Radiomics dataset from TCIA.
 from tcia_utils import nbia
 from nsclc_survival.settings import RAW_DATA_PATH, COLLECTION_NAME, N_PATIENTS, patientID, modality, CT, RTSTRUCT
 
-def download_nsclc_radiomics_data():
+def download_nsclc_radiomics_data(n_patients_to_download=N_PATIENTS):
     """
     This function connects to the TCIA API, retrieves metadata for the NSCLC-Radiomics collection, 
     filters for patients with both CT and RTSTRUCT modalities,
     and downloads the DICOM series for a subset of patients into a specified directory.
 
-    Attributes (from settings.py):
+    Settings (from settings.py):
         RAW_DATA_PATH (Path): Directory where raw DICOM data will be saved.
         COLLECTION_NAME (str): Name of the TCIA collection to download.
-        N_PATIENTS (int): Number of valid patients to retrieve.
+    
+    Args:
+        n_patients_to_download (int, optional): Number of valid patients to retrieve. 
+            Defaults to N_PATIENTS from settings.py.
 
     Raises:
         ValueError: it raises an error if no patients with both CT and RTSTRUCT modalities are found in the specified collection.
@@ -44,12 +47,12 @@ def download_nsclc_radiomics_data():
     print(f"Found {len(valid_patients)} complete patients.")
 
     # 3. Select a subset (e.g. 100)
-    if len(valid_patients) < N_PATIENTS:
-        # If N_PATIENTS is greater than the available patients
-        print(f"Warning: Requested {N_PATIENTS} patients, but only {len(valid_patients)} are available.")
+    if len(valid_patients) < n_patients_to_download:
+        # If n_patients_to_download is greater than the available patients
+        print(f"Warning: Requested {n_patients_to_download} patients, but only {len(valid_patients)} are available.")
         actual_download_count = len(valid_patients)
     else:
-        actual_download_count = N_PATIENTS
+        actual_download_count = n_patients_to_download
 
     subset_patients = valid_patients[:actual_download_count]
     df_to_download = df[df[patientID].isin(subset_patients)]

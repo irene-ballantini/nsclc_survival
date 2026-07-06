@@ -4,7 +4,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
-# --- Subdirectories ---
+# --- Subdirectories (Package Structure: TO NOT CHANGE) ---
 RAW_DATA_PATH = DATA_DIR / "raw_data"
 ORGANIZED_DATA_PATH = DATA_DIR / "organized_data"
 PREPROCESSED_DATA_PATH = DATA_DIR / "preprocessed_data"
@@ -15,6 +15,7 @@ PLOT_PATH = DATA_DIR / "plots"
 CONFIG_PATH = BASE_DIR / "configs"
 
 CLINICAL_FEATURES_PATH = BASE_DIR / "examples"
+# ---------------------------------------------------------
 
 # --- Config Paths ---
 # Centralize the path to the radiomics config file

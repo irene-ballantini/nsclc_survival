@@ -16,24 +16,10 @@ from nsclc_survival import (
     SurvivalRiskClassifier
     )
 
-from nsclc_survival._download_data import download_nsclc_radiomics_data
-from nsclc_survival._organize_data import organize_dicom_data
-
-from nsclc_survival.utils import (
-    save_features_to_csv, 
-    plot_loss_funct,
-    plot_extreme_survival_curves, 
-    plot_deviance_residuals, 
-    kaplan_meier_plot
-)
-
-from nsclc_survival.settings import (
-    RAW_DATA_PATH, ORGANIZED_DATA_PATH, PREPROCESSED_DATA_PATH, RADIOMICS_CONFIG_PATH, 
-    RAD_FEATURES_CSV_PATH, CLINICAL_FEATURES_CSV_PATH, RESULTS_PATH, PLOT_SURVIVAL_CURVES, PLOT_DEV_RESIDUALS, 
-    PLOT_DEEP_DEV_RESIDUALS, PLOT_DEEP_SURVIVAL_CURVES, PLOT_PATH,
-    patientID, survival_time_col, event_status_col, stage_col, gender_col, histology_col, 
-    stage_mapping, gender_mapping
-)
+from nsclc_survival import _download_data
+from nsclc_survival import _organize_data
+from nsclc_survival import utils
+from nsclc_survival import settings
 
 logging.basicConfig(
     level=logging.INFO, 
@@ -47,14 +33,86 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     """
-    To change parameters from the terminal
+    Parse command line arguments for the nsclc_survival package.
+    This function sets up the argument parser, defines the expected arguments,
+    and returns the parsed arguments.
 
     Returns:
-        _type_: _description_
+        argparse.Namespace: The parsed command line arguments as a Namespace object.
+
+    Raises:
+        argparse.ArgumentError: If there is an error in the argument parsing, such as a missing required
+        argument or an invalid value.
     """
-    parser = argparse.ArgumentParser(description="NSCLC Survival Analysis Pipeline")
-    parser.add_argument("--cv-folds", type=int, default=5, help="Folds for the Lasso Cross-Validation")
-    parser.add_argument("--epochs", type=int, default=130, help="Epochs of training for Deep Cox")
+    # Global information
+    parser = argparse.ArgumentParser(
+        prog='nsclc_survival',
+        argument_default=None,
+        add_help=True,
+        prefix_chars='-',
+        allow_abbrev=True,
+        exit_on_error=True,
+        description='NSCLC Survival Analysis Pipeline: Survival Time prediction using CT-extracted features and clinical data.'
+    )
+    
+    # nsclc_survival --n-patients <int>
+    # This option allows the user to specify the number of patients to download.
+    # The default value is 100 and is provided in the separated settings.py file, 
+    # which is possible to modify to customize some parameters of the pipeline execution. 
+    # The number of patients to download can be modified both via command line and in the settings file.
+    parser.add_argument(
+        "--n-patients", 
+        type=int, 
+        default=settings.N_PATIENTS,    # default set to 100 in settings.py 
+        help=f"Number of patients to download (default from settings: {settings.N_PATIENTS})"
+    )   
+    
+    # nsclc_survival --cv-folds <int>
+    # This option allows the user to specify the number of folds for the Lasso Cross-Validation
+    # in Cox model.
+    parser.add_argument(
+        "--cv-folds", 
+        type=int, 
+        default=5, 
+        help="Folds for the Lasso Cross-Validation in Cox model. Default to 5."
+    )
+    
+    # nsclc_survival --epochs <int>
+    # This option allows the user to specify the number of epochs of training for Deep Cox
+    parser.add_argument(
+        "--epochs", 
+        type=int, 
+        default=200, 
+        help="Epochs of training for Deep Cox"
+    )
+    
+    # nsclc_survival --batch-size <int> 
+    # This option allows the user to specify the batch size of training for Deep Cox
+    parser.add_argument(
+        "--batch-size", 
+        type=int, 
+        default=64, 
+        help="Batch size of training for Deep Cox"
+    )
+    
+    # nsclc_survival --hidden-dims <int>...
+    # This option allows the user to specify the architecture of the hidden layers for Deep Cox 
+    parser.add_argument(
+        "--hidden-dims", 
+        type=int, 
+        nargs="+", 
+        default=[64, 32], 
+        help="Hidden dimensions for the Deep Cox neural network (e.g., --hidden-dims 128 64 32)"
+    )
+
+    # nsclc_survival --version
+    parser.add_argument(
+        "-v", "--version", 
+        action="version", 
+        version=f"%(prog)s {__version__}", 
+        help="Show the current package version and exit"
+    ) 
+
     #parser.add_argument("--skip-extraction", action="store_true", help="Salta l'estrazione dei feature radiomici")
     return parser.parse_args()
 
@@ -62,20 +120,20 @@ def main ():
     args = parse_args()
     logger.info(f"Package version: {__version__}")
 
-     # Download and organize data (if data not already available locally and organized, otherwise it will skip these steps)
-    create_setup = not (ORGANIZED_DATA_PATH.exists() and any(ORGANIZED_DATA_PATH.iterdir())) 
+    # Download and organize data (if data not already available locally and organized, otherwise it will skip these steps)
+    create_setup = not (settings.ORGANIZED_DATA_PATH.exists() and any(settings.ORGANIZED_DATA_PATH.iterdir())) 
     if create_setup:
         logger.info("[INFO] Download and organization of DICOM data in progress...")
-        download_nsclc_radiomics_data()
-        organize_dicom_data(raw_path=RAW_DATA_PATH, organized_path=ORGANIZED_DATA_PATH)
+        _download_data.download_nsclc_radiomics_data(n_patients_to_download=args.n_patients)
+        _organize_data.organize_dicom_data(raw_path=settings.RAW_DATA_PATH, organized_path=settings.ORGANIZED_DATA_PATH)
     
     logger.info("\n" + "="*100)
     logger.info(" 1. RUNNING RADIOMICS PREPROCESSING ".center(100, " "))
     logger.info("="*100)
 
     processor = RadiomicsPreprocessor(
-        organized_path=ORGANIZED_DATA_PATH, 
-        preprocessed_path=PREPROCESSED_DATA_PATH
+        organized_path=settings.ORGANIZED_DATA_PATH, 
+        preprocessed_path=settings.PREPROCESSED_DATA_PATH
     )    
 
     processor.process_all_patients()
@@ -84,11 +142,11 @@ def main ():
     # print(" 2. RUNNING FEATURE EXTRACTION  ".center(100, " "))
     # print("=" * 100)
 
-    # fe = FeatureExtractor(config_path=RADIOMICS_CONFIG_PATH)
+    # fe = FeatureExtractor(config_path=settings.RADIOMICS_CONFIG_PATH)
     
-    # extracted_features = fe.extract_all_features(preprocessed_path=PREPROCESSED_DATA_PATH)
+    # extracted_features = fe.extract_all_features(preprocessed_path=settings.PREPROCESSED_DATA_PATH)
 
-    # save_features_to_csv(features_list=extracted_features, output_path=RAD_FEATURES_CSV_PATH)
+    # utils.save_features_to_csv(features_list=extracted_features, output_path=settings.RAD_FEATURES_CSV_PATH)
 
     print("\n" + "=" * 100)
     print(" 3. MODELLING ".center(100, " "))
@@ -96,18 +154,19 @@ def main ():
 
     print("--- LOADING AND PROCESSING DATA ---")
     data_processor = RadiomicsClinicalDataProcessor(
-        radiomics_path=RAD_FEATURES_CSV_PATH, 
-        clinical_path=CLINICAL_FEATURES_CSV_PATH
+        radiomics_path=settings.RAD_FEATURES_CSV_PATH, 
+        clinical_path=settings.CLINICAL_FEATURES_CSV_PATH
     )
     
     # Load and merge data
-    df_merged = data_processor.load_and_merge(patientID, stage_col, gender_col, histology_col, stage_mapping, gender_mapping)
+    df_merged = data_processor.load_and_merge(settings.patientID, settings.stage_col, settings.gender_col, 
+                                              settings.histology_col, settings.stage_mapping, settings.gender_mapping)
     
     # Split and standardize data
     X_total, y_total, X_train, X_test, y_train, y_test = data_processor.split_and_standardize(
-        patientID = patientID,
-        survival_time_col=survival_time_col,
-        event_status_col=event_status_col,
+        patientID = settings.patientID,
+        survival_time_col=settings.survival_time_col,
+        event_status_col=settings.event_status_col,
         train_size=0.8,
         random_seed=42
     )
@@ -120,14 +179,14 @@ def main ():
     # Initialize the Lasso-Cox model
     lasso_cox = LassoCoxModel(
         feature_names=data_processor.feature_names,
-        stage=stage_col,
-        gender=gender_col,
-        histology=histology_col
+        stage=settings.stage_col,
+        gender=settings.gender_col,
+        histology=settings.histology_col
     )
     
     # Execute Cross-Validation to find the optimal alpha and train the final model
     # You can change the number of folds by modifying cv (e.g., cv=5)
-    lasso_cox.fit_crossval(X_train, y_train, X_total, y_total, cv=5)
+    lasso_cox.fit_crossval(X_train, y_train, X_total, y_total, cv=args.cv_folds)
 
     print("\n--- COX STEP 2: EXTRACTING SELECTED RADIOMIC FEATURES ---")
     # Get the DataFrame with only the features selected by LASSO (with coefficients and Hazard Ratio)
@@ -139,7 +198,7 @@ def main ():
     print(df_selected_features.head())
     
     # Save the selected features to a CSV 
-    output_directory = Path(RESULTS_PATH)
+    output_directory = Path(settings.RESULTS_PATH)
     output_directory.mkdir(parents=True, exist_ok=True)
     df_selected_features.to_csv(output_directory / "features_selected.csv", index=False, float_format="%.4f")
 
@@ -160,7 +219,7 @@ def main ():
     df_predictions = lasso_cox.compute_residuals_and_metrics(
         y_input=y_test, 
         patient_ids=data_processor.patient_ids_test, 
-        patientID=patientID, 
+        patientID=settings.patientID, 
         risk_scores=risk_scores
     )
     
@@ -170,13 +229,13 @@ def main ():
         df_predictions.to_csv(output_directory / "cox_test_set_predictions.csv", index=False, float_format="%.2f")
 
     print("\n--- COX STEP 5: VISUALIZING EXTREME SURVIVAL CURVES ---")
-    print(f"[INFO] Plotting and saving survival curves for patients (highest vs lowest risk) to: {PLOT_SURVIVAL_CURVES}")
+    print(f"[INFO] Plotting and saving survival curves for patients (highest vs lowest risk) to: {settings.PLOT_SURVIVAL_CURVES}")
     
     # [UTILS] Use the plot function with survival curves and risk scores
-    plot_extreme_survival_curves(
+    utils.plot_extreme_survival_curves(
         survival_functions=survival_curves, 
         risk_scores=risk_scores, 
-        output_path=PLOT_SURVIVAL_CURVES
+        output_path=settings.PLOT_SURVIVAL_CURVES
     )
 
     print("\n--- COX STEP 6: INTEGRATED BRIER SCORE (IBS) ---")
@@ -188,7 +247,7 @@ def main ():
         X_input=X_test,
         y_input=y_test,
         patient_ids=data_processor.patient_ids_test,
-        patientID=patientID, 
+        patientID=settings.patientID, 
         risk_scores = risk_scores, 
         hazards = hazards
     )
@@ -200,16 +259,16 @@ def main ():
         print(f"[INFO] Diagnostic residuals of Cox model saved in: {residuals_path}")
         # >>> GENERATE THE PLOT <<<
         print("\n--- COX STEP 8: PLOTTING DIAGNOSTIC RESIDUALS ---")
-        plot_deviance_residuals(
+        utils.plot_deviance_residuals(
             df_risk_residuals=df_residuals,
-            output_path=PLOT_DEV_RESIDUALS
+            output_path=settings.PLOT_DEV_RESIDUALS
         )
 
     print("\n--- SUMMARY: COX MODEL WORST AND BEST PREDICTIONS ---")
     # Worst and Best Cases (where the model did the biggest and the smallest error)
     if df_predictions is not None:
         worst_predictions = df_predictions.sort_values(by='Absolute_Error_Days', ascending=False)
-        col = [patientID, 'Actual_Days', 'Predicted_Median_Days', 'Absolute_Error_Days']
+        col = [settings.patientID, 'Actual_Days', 'Predicted_Median_Days', 'Absolute_Error_Days']
         print("\nPatients with the biggest temporal prediction error:")
         print(worst_predictions[col].head(5).to_string(index=False))
 
@@ -229,16 +288,16 @@ def main ():
 
     deep_cox = DeepCoxModel(
         input_dim=input_dimension, 
-        hidden_dims=[4], 
+        hidden_dims=args.hidden_dims, 
         dropout_rate=0.1, 
         lr=5e-4, 
         weight_decay=1e-4
     )  
 
-    deep_cox.fit(X_train, y_train, epochs=170, batch_size=32)
+    deep_cox.fit(X_train, y_train, epochs=args.epochs, batch_size=args.batch_size)    # with 100 patients, 170 epochs and batch size 32 is a good compromise between training time and performance
     
-    loss_funct_path = PLOT_PATH / "deep_cox_loss_curve.png"
-    plot_loss_funct(deep_cox.loss_history, loss_funct_path)
+    loss_funct_path = settings.PLOT_PATH / "deep_cox_loss_curve.png"
+    utils.plot_loss_funct(deep_cox.loss_history, loss_funct_path)
 
     print("\n--- DEEP COX STEP 2: RISK SCORES ---")
     print(f"[INFO] Computing risk scores and hazards for the test set using the trained Deep Cox model...")
@@ -258,18 +317,18 @@ def main ():
         )
        
     print("\n--- DEEP COX STEP 5: VISUALIZING EXTREME SURVIVAL CURVES ---")
-    plot_extreme_survival_curves(
+    utils.plot_extreme_survival_curves(
         survival_functions=deep_survival_curves, 
         risk_scores=deep_risk_scores, 
-        output_path=PLOT_DEEP_SURVIVAL_CURVES
+        output_path=settings.PLOT_DEEP_SURVIVAL_CURVES
     )
-    print(f"[INFO] Plotting and saving Deep Cox extreme survival curves for patients (highest vs lowest risk) to: {PLOT_DEEP_SURVIVAL_CURVES}")
+    print(f"[INFO] Plotting and saving Deep Cox extreme survival curves for patients (highest vs lowest risk) to: {settings.PLOT_DEEP_SURVIVAL_CURVES}")
     
     print("\n--- DEEP COX STEP 6: MODEL EVALUATION (RESIDUALS) ---")
     df_deep_predictions = deep_cox.compute_residuals_and_metrics( 
         y_input=y_test, 
         patient_ids=data_processor.patient_ids_test, 
-        patientID=patientID, 
+        patientID=settings.patientID, 
         risk_scores=deep_risk_scores
     )
     
@@ -286,7 +345,7 @@ def main ():
         X_input=X_test, 
         y_input=y_test, 
         patient_ids=data_processor.patient_ids_test,
-        patientID=patientID, 
+        patientID=settings.patientID, 
         risk_scores=deep_risk_scores, 
         hazards=deep_hazards
     )
@@ -297,15 +356,15 @@ def main ():
         df_deep_residuals.to_csv(deep_residuals_path, index=False, float_format="%.2f")
         print(f"[INFO] Diagnostic residuals of Deep Cox saved in: {deep_residuals_path}")
         print(f"\n--- DEEP COX STEP 9: DEEP COX PLOTTING RESIDUALS DIAGNOSTICS")
-        plot_deviance_residuals(
+        utils.plot_deviance_residuals(
             df_risk_residuals=df_deep_residuals, 
-            output_path=PLOT_DEEP_DEV_RESIDUALS
+            output_path=settings.PLOT_DEEP_DEV_RESIDUALS
         )
     
     print("\n--- SUMMARY: DEEP COX MODEL WORST AND BEST PREDICTIONS ---")
     if df_deep_predictions is not None:
         deep_worst = df_deep_predictions.sort_values(by='Absolute_Error_Days', ascending=False)
-        col = [patientID, 'Actual_Days', 'Predicted_Median_Days', 'Absolute_Error_Days']
+        col = [settings.patientID, 'Actual_Days', 'Predicted_Median_Days', 'Absolute_Error_Days']
         print("\nDeep Cox: Patients with the biggest temporal prediction error:")
         print(deep_worst[col].head(5).to_string(index=False))
 
@@ -324,12 +383,12 @@ def main ():
     y_pred_cox_classes = classifier_cox.predict_risk_class(risk_scores=risk_scores)
     p_value_cox = classifier_cox.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_cox_classes, title_suffix="Lasso-Cox")
     
-    kaplan_meier_plot(
+    utils.kaplan_meier_plot(
     y_test=y_test,
     pred_classes=y_pred_cox_classes,
     logrank_p_value=p_value_cox,
     title_suffix="Cox",
-    output_path=PLOT_PATH / "KM_popolazione_cox.png"
+    output_path=settings.PLOT_PATH / "KM_popolazione_cox.png"
 )
 
     print("--- CLASSIFICATION REPORT COX---")
@@ -361,12 +420,12 @@ def main ():
     y_pred_deep_classes = classifier_deep.predict_risk_class(risk_scores=deep_risk_scores)
     p_value_deep = classifier_deep.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_deep_classes, title_suffix="DeepCox")
     
-    kaplan_meier_plot(
+    utils.kaplan_meier_plot(
     y_test=y_test,
     pred_classes=y_pred_deep_classes,
     logrank_p_value=p_value_deep,
     title_suffix="DeepCox",
-    output_path=PLOT_PATH / "KM_popolazione_deepcox.png"
+    output_path=settings.PLOT_PATH / "KM_popolazione_deepcox.png"
 )
 
     print("--- CLASSIFICATION REPORT DEEP COX ---")
