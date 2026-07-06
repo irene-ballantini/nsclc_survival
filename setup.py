@@ -35,7 +35,6 @@ setup(
     "torch",
     "pyradiomics",
     "matplotlib",
-    "ruamel.yaml",
   ],
   url=URL,
   download_url=DOWNLOAD_URL,

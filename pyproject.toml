@@ -52,9 +52,7 @@ dependencies = [
   # Feature Extraction (Radiomics)
   "pyradiomics",
   # Data visualization
-  "matplotlib",
-  # YAML Handling
-  "ruamel.yaml",
+  "matplotlib"
 ]
 
 [project.scripts]
@@ -66,6 +64,8 @@ dev = [
   "pytest",
   "codecov",
   "pytest-cov",
+  "pytest-mock", 
+  "ruamel.yaml"
 ]
 
 [project.urls]
