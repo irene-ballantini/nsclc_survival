@@ -5,7 +5,6 @@ import pytest
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
-from unittest.mock import MagicMock
 
 # Import the class
 from nsclc_survival.preprocessing import RadiomicsPreprocessor  
@@ -85,7 +84,7 @@ def test_pipeline_success(input_spacing, expected_size, setup_mock_dataset, mock
     mock_get_dicoms.return_value = ["fake_ct_slice1.dcm"]
 
     # 2. Mocking of RTStructBuilder and of the returned rtstruct object
-    mock_rtstruct_instance = MagicMock()
+    mock_rtstruct_instance = mocker.MagicMock()
     # Communicate that the "GTV-1" ROI is present
     mock_rtstruct_instance.get_roi_names.return_value = ["GTV-1", "SpinalCord"]
     # Return a numpy mask coherent with the dimension of the CT (H, W, Slices) -> (10, 10, 5)
@@ -134,7 +133,7 @@ def test_pipeline_missing_roi(setup_mock_dataset, mocker):
     mock_rt_builder = mocker.patch('nsclc_survival.preprocessing.RTStructBuilder.create_from')
     
     # Mocking of an rtstruct WITHOUT GTV-1
-    mock_rtstruct_instance = MagicMock()
+    mock_rtstruct_instance = mocker.MagicMock()
     mock_rtstruct_instance.get_roi_names.return_value = ["Heart", "Lung_L"]
     mock_rt_builder.return_value = mock_rtstruct_instance
 
@@ -177,7 +176,7 @@ def test_pipeline_mismatched_dimensions(setup_mock_dataset, mocker):
     mock_get_dicoms.return_value = ["fake_ct_slice1.dcm"]
 
     # 2. Configure the mask with the WRONG dimension: 12x12x5 instead of 10x10x5
-    mock_rtstruct_instance = MagicMock()
+    mock_rtstruct_instance = mocker.MagicMock()
     mock_rtstruct_instance.get_roi_names.return_value = ["GTV-1"]
     
     # CREATE THE DISALIGNMENT: (12, 12, 5)
