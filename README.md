@@ -83,13 +83,11 @@ Before installing the package, please ensure your system satisfies the following
 1. **C++ Compiler**: Due to the underlying C/C++ extensions in `pyradiomics` and `scikit-survival`, a C++ compiler must be present on the system.
 2. **Python Version**: This project requires **Python 3.8, 3.9 or 3.10** (3.9+ recommended due to dependencies such as `scikit-survival` and `pyradiomics`). Also for this reason it is recommended to use a virtual environment with a supported Python version.
 
-The complete list of requirements for the `nsclc_survival` package is reported in the [requirements.txt](requirements.txt).
+The complete list of requirements for the `nsclc_survival` package is reported in the [requirements.txt](https://github.com/irene-ballantini/nsclc_survival/blob/main/requirements.txt).
 
-> ⚠️ **CRITICAL NOTE ON PYRADIOMICS & NUMPY COMPATIBILITY**
-> 
-> Due to legacy build constraints in the `pyradiomics` library, running a standard single-step installation (e.g., `pip install -r requirements.txt`, or `pip install -e .`) **will fail** with a `ModuleNotFoundError: No module named 'numpy'`, even if the `numpy` library is present in the requirements file and in setup.py and pyproject.toml.
-> 
-> `pyradiomics` requires `numpy` to be physically present in the active environment *before* its own metadata generation and compilation processes begin; it cannot resolve `numpy` as a parallel dependency during a bundled installation. 
+| :warning: CRITICAL NOTE ON PYRADIOMICS & NUMPY COMPATIBILITY |
+|:------------------|
+| Due to legacy build constraints in the `pyradiomics` library, running a standard single-step installation (e.g., `pip install -r requirements.txt`, or `pip install -e .`) **will fail** with a `ModuleNotFoundError: No module named 'numpy'`, even if the `numpy` library is present in the requirements file and in setup.py and pyproject.toml. `pyradiomics` requires `numpy` to be physically present in the active environment *before* its own metadata generation and compilation processes begin; it cannot resolve `numpy` as a parallel dependency during a bundled installation. |
 
 ---
 ### Setup Instruction (Important)
@@ -132,18 +130,91 @@ You can append optional arguments to the command to modify the pipeline paramete
 ```bash
 $ nsclc_survival --help
 
-usage: nsclc_survival [-h] [--cv-folds CV_FOLDS] [--epochs EPOCHS]
+usage: nsclc_survival [-h] [--n-patients N_PATIENTS] [--cv-folds CV_FOLDS] [--epochs EPOCHS] [--batch-size BATCH_SIZE] [--hidden-dims HIDDEN_DIMS [HIDDEN_DIMS ...]] [-v]
 
-NSCLC Survival Analysis Pipeline
+NSCLC Survival Analysis Pipeline: Survival Time prediction using CT-extracted features and clinical data.
 
 options:
-  -h, --help           show this help message and exit
-  --cv-folds CV_FOLDS  Folds for the Lasso Cross-Validation
-  --epochs EPOCHS      Epochs of training for Deep Cox
+  -h, --help            show this help message and exit
+  --n-patients N_PATIENTS
+                        Number of patients to download (default from settings: 100)
+  --cv-folds CV_FOLDS   Folds for the Lasso Cross-Validation in Cox model. Default to 5.
+  --epochs EPOCHS       Epochs of training for Deep Cox
+  --batch-size BATCH_SIZE
+                        Batch size of training for Deep Cox
+  --hidden-dims HIDDEN_DIMS [HIDDEN_DIMS ...]
+                        Hidden dimensions for the Deep Cox neural network (e.g., --hidden-dims 128 64 32)
+  -v, --version         Show the current package version and exit
 ```
 
-
 ## Testing
+
+A full set of testing functions is provided in the [tests](tests) directory.
+
+The tests are performed using the `pytest` python package. You can run the full list of tests with:
+
+```
+python -m pytest tests --cov=nsclc_survival --cov-config=.coveragerc
+```
+in the root directory.
+
+## Table of Contents
+
+Description of the folders related to the `Python` version.
+
+| **Directory**                                                                                | **Description**                                                                                       |
+|:---------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------|
+|[examples](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples)             | Examples of CSV files containing the clinical features to merge with the extracted radiomics features.|
+|[configs](https://github.com/irene-ballantini/nsclc_survival/tree/main/configs)               | Configuration files (YAML) for `pyradiomics` feature extraction.                                             |
+|[nsclc_survival](https://github.com/irene-ballantini/nsclc_survival/tree/main/nsclc_survival) | List of `Python` scripts for the `nsclc_survival` pipeline.                                           | 
+
+Below there's an overview of the project's directory tree created once the package is ran.
+
+```text
+nsclc_survival
+├── configs/
+│   └── radiomics_config.yaml       # Configuration for pyradiomics feature extraction
+├── examples/
+│   └── NSCLC-Radiomics-Lung1...csv # Example clinical features dataset
+├── nsclc_survival/
+│   ├── __init__.py
+│   ├── settings.py                 # Global settings and path configurations
+│   └── ...                         # Core Python package source code
+└── data/                           # Created automatically by the pipeline
+    ├── raw_data/                   # Downloaded raw imaging data (CT, RTSTRUCT)
+    ├── organized_data/             # Sorted/organized data
+    ├── preprocessed_data/          # Processed images ready for extraction
+    ├── features/                   # Contains 'extracted_features.csv'
+    ├── results/                    # Model outputs and metrics
+    └── plots/                      # Generated survival curves and residual plots
+```
+
+## Configuration and Customization
+In [nsclc_survival](https://github.com/irene-ballantini/nsclc_survival/tree/main/nsclc_survival) there's the [settings.py](https://github.com/irene-ballantini/nsclc_survival/blob/main/nsclc_survival/settings.py) file which is a configuration file to configure and centralize global constants, download parameters, and file directories and paths. By modifying this file, you can customize:
+* **Download parameters**: (e.g., N_PATIENTS to change the dataset size). The number of patient to download can also be changed via command line.
+* **Dataset Structure**: Column names of the clinical CSV files and survival mappings (e.g., stage_mapping for the overall tumor stage).
+* **Saving directories**: Saving directories and filenames.
+
+> [!WARNING]
+> **DO NOT MODIFY** the paths listed under the `# --- Subdirectories --- ` section. These constants define the internal package structure, allowing the pipeline to automatically create and manage the `data/` directory tree.
+
+> [!NOTE]
+> You can also change the `COLLECTION_NAME` constant to download a different dataset from **The Cancer Imaging Archive (TCIA)**, provided that its structure matches or is highly similar to the `NSCLC-Radiomics` dataset.
+
+## Pipeline Workflow
+The dataset undergoes a structured pipeline, moving through the following stages:
+
+1. **`_download_data.py`**: Downloads and stores the raw data in the `raw_data/` folder. Files are grouped into separate folders named after their **Unique Identifiers (UID)** - in the DICOM standard, a UID is a unique, globally standardized numeric string used to unambiguously identify medical imaging objects. At this stage, there is no human-readable distinction between patient IDs and modalities (`CT`, `RTSTRUCT`, `SEG`).
+2. **`_organize_data.py`**: Reorganizes the raw data into the `organized_data/` folder using patient-specific subdirectories. Each folder contains the `CT` series along with its matching `RTSTRUCT` and `SEG` files. Once this reorganization step is completed successfully, the `raw_data/` folder is automatically removed to save disk space.
+3. **`preprocessing.py`**: Converts the organized DICOM data into **NIfTI format (`.nii.gz`)** and saves them in `preprocessed_data/<PatientID>/`. Specifically, this step:
+   * Extracts the primary tumor mask (`GTV-1` ROI) from the `RTSTRUCT` vector coordinates and converts it into a binary spatial volume using `rt_utils` and `SimpleITK`.
+   * Resamples both the `CT` image (using BSpline interpolation) and the tumor mask (using Nearest Neighbor interpolation) to a **1.0mm isotropic spacing** to ensure spatial consistency for radiomics.
+   * Outputs two standardized files per patient: `image.nii.gz` (the resampled CT) and `label.nii.gz` (the resampled tumor mask).
+4. **`feature_extraction.py`**: Extracts radiomics features from the preprocessed NIfTI files (`image.nii.gz` and `label.nii.gz`) using the **PyRadiomics** framework. The feature extraction parameters are specified in [radiomics_config.yaml](https://github.com/irene-ballantini/nsclc_survival/blob/main/configs/radiomics_config.yaml). In the end, all results are merged into a single structured list of dictionaries, map-indexed by `PatientID`, ready to be exported as a clean CSV dataset to the `RAD_FEATURES_CSV_PATH` directory defined in [settings.py](https://github.com/irene-ballantini/nsclc_survival/blob/main/nsclc_survival/settings.py).
+5. **`nsclc_survival.py`**: Implements the survival modeling framework. Specifically, this script handles:
+   * **Data Preparation**: Splits the dataset into training and test sets and performs feature standardization.
+   * **Model Training**: Trains both a clinical-radiomics **Standard Lasso-Cox Model** (for baseline statistical modeling) and a **Deep Cox Model** (for non-linear deep learning survival analysis).
+   * **Evaluation & Risk Stratification**: Computes risk scores to classify patients into risk groups and generates evaluation outputs (e.g., Kaplan-Meier survival curves and deviance residual plots) saved in the `results/` and `plots/` directories.
 
 ## How to Cite 
 
