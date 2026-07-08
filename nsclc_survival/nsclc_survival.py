@@ -252,6 +252,7 @@ class LassoCoxModel:
         the alpha hyperparameter to train the definitive LASSO-Cox model.
 
         This method operates in two distinct phases:
+
         1. It performs a Nested Cross-Validation (Outer Loop for model validation and Inner Loop 
            for hyperparameter optimization) on the raw total data to compute an unbiased estimate 
            of the protocol's generalization capability (C-index).
@@ -267,11 +268,9 @@ class LassoCoxModel:
                 (n_samples, n_features).
             y_train (numpy.ndarray): NumPy structured array containing the survival target 
                 with two fields: 'Event_Status' (bool) and 'Survival_Time' (float).
-            X_total : numpy.ndarray or pandas.DataFrame
-                The complete, un-split raw dataset used by the Outer Loop of the Nested CV 
+            X_total (numpy.ndarray or pandas.DataFrame): The complete, un-split raw dataset used by the Outer Loop of the Nested CV 
                 to dynamically simulate imputation, scaling, and training fold-by-fold.
-            y_total : numpy.ndarray (structured)
-                Structured target array containing 'Event_Status' and 'Survival_Time' for X_total.
+            y_total (numpy.ndarray): Structured target array containing 'Event_Status' and 'Survival_Time' for X_total.
             cv (int, optional): Number of folds for the K-Fold Cross-Validation. 
                 Defaults to 5.
             n_repeats (int, optional): Number of times Cross-Validation is repeated 
