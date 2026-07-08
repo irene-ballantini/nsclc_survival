@@ -5,6 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 import pandas as pd
+import shutil
 
 from nsclc_survival import ( 
     __version__, 
@@ -113,40 +114,135 @@ def parse_args():
         help="Show the current package version and exit"
     ) 
 
-    #parser.add_argument("--skip-extraction", action="store_true", help="Salta l'estrazione dei feature radiomici")
+    # nsclc_survival --skip-download
+    # Flag to skip the download and organization of DICOM data (use local data if present)
+    parser.add_argument(
+        "--skip-download",
+        action="store_true",
+        help="Skip the download and organization of DICOM data (use local data if present)"
+    )
+
+    # nsclc_survival --skip-extraction
+    # Flag to skip the extraction of radiomic features
+    parser.add_argument(
+        "--skip-extraction", 
+        action="store_true", 
+        help="Skip the preprocessing and extraction of radiomic features"
+    )
+
     return parser.parse_args()
 
 def main (): 
     args = parse_args()
     logger.info(f"Package version: {__version__}")
 
-    # Download and organize data (if data not already available locally and organized, otherwise it will skip these steps)
-    create_setup = not (settings.ORGANIZED_DATA_PATH.exists() and any(settings.ORGANIZED_DATA_PATH.iterdir())) 
-    if create_setup:
-        logger.info("[INFO] Download and organization of DICOM data in progress...")
+    # Check how many patients are currently on disk
+    if settings.ORGANIZED_DATA_PATH.exists():
+        current_patients_on_disk = len(sorted([f for f in settings.ORGANIZED_DATA_PATH.iterdir() if f.is_dir()]))
+    else:
+        current_patients_on_disk = 0
+
+    # Data are ready only if the folder is not empty 
+    # and the number of patients on disk matches the requested number
+    data_exists = (current_patients_on_disk > 0) and (current_patients_on_disk == args.n_patients)
+
+    # Download and organize data
+    if not args.skip_download and not data_exists:
+        # Handling the mismatch before starting the download process
+        if current_patients_on_disk > 0 and current_patients_on_disk != args.n_patients:
+            logger.info(f"[INFO] Patient count mismatch: Requested {args.n_patients}, but found {current_patients_on_disk} on disk.")
+            logger.info(f"[INFO] Cleaning up old organized data in {settings.ORGANIZED_DATA_PATH}...")
+            
+            # Empty the organized folder to avoid mixing old and new data
+            try:
+                if settings.ORGANIZED_DATA_PATH.exists():
+                    shutil.rmtree(settings.ORGANIZED_DATA_PATH)
+                settings.ORGANIZED_DATA_PATH.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                logger.error(f"[ERROR] Critical: Could not clean organized folder due to: {e}")
+                logger.error("[ERROR] Please close any files/viewers inside the data folder and restart the script.")
+                return
+
+            logger.info(f"[INFO] Re-downloading and organizing data for the new requested amount of {args.n_patients} patients...")
+        else:
+            logger.info(f"[INFO] Download and organization of DICOM data in progress for {args.n_patients} patients...")
+
         _download_data.download_nsclc_radiomics_data(n_patients_to_download=args.n_patients)
         _organize_data.organize_dicom_data(raw_path=settings.RAW_DATA_PATH, organized_path=settings.ORGANIZED_DATA_PATH)
+        # Update the status after the download is completed successfully
+        data_exists = True
+
+    elif args.skip_download:
+        logger.info("[INFO] Download skipped by user via --skip-download.")
+    else:
+        logger.info("[INFO] Data already available locally. Skipping download.")
+
+    # --- Security Block ---
+    # If data are not available (because the user skipped the download or the download failed)
+    # and the script is about to start a phase that requires the data, it stops.
+    if not data_exists and not args.skip_extraction:
+        logger.error("[ERROR] Critical: No organized data found in settings.ORGANIZED_DATA_PATH!")
+        logger.error("[ERROR] You used --skip-download but the folder is empty. Cannot proceed with radiomics.")
+        return 
     
-    logger.info("\n" + "="*100)
-    logger.info(" 1. RUNNING RADIOMICS PREPROCESSING ".center(100, " "))
-    logger.info("="*100)
+    # Check if features are ready and valid
+    features_exist = data_exists and settings.RAD_FEATURES_CSV_PATH.exists()
 
-    processor = RadiomicsPreprocessor(
-        organized_path=settings.ORGANIZED_DATA_PATH, 
-        preprocessed_path=settings.PREPROCESSED_DATA_PATH
-    )    
+    # --- Radiomics Processing and Feature Extraction ---
+    if not args.skip_extraction and not features_exist:
+        if settings.RAD_FEATURES_CSV_PATH.exists():
+            logger.info(f"Removing outdated features file: {settings.RAD_FEATURES_CSV_PATH}")
+            try:
+                settings.RAD_FEATURES_CSV_PATH.unlink() # Cancella il singolo file CSV
+            except Exception as e:
+                logger.error(f"Critical: Could not remove outdated features CSV: {e}")
+                return
+        logger.info("\n" + "="*100)
+        logger.info(" 1. RUNNING RADIOMICS PREPROCESSING ".center(100, " "))
+        logger.info("="*100)
 
-    processor.process_all_patients()
+        processor = RadiomicsPreprocessor(
+            organized_path=settings.ORGANIZED_DATA_PATH, 
+            preprocessed_path=settings.PREPROCESSED_DATA_PATH
+        )    
+
+        processor.process_all_patients()
     
-    # print("\n" + "=" * 100)
-    # print(" 2. RUNNING FEATURE EXTRACTION  ".center(100, " "))
-    # print("=" * 100)
+        print("\n" + "=" * 100)
+        print(" 2. RUNNING FEATURE EXTRACTION  ".center(100, " "))
+        print("=" * 100)
 
-    # fe = FeatureExtractor(config_path=settings.RADIOMICS_CONFIG_PATH)
+        preprocessed_exists = settings.PREPROCESSED_DATA_PATH.exists() and any(settings.PREPROCESSED_DATA_PATH.iterdir())
+        
+        if preprocessed_exists:
+            fe = FeatureExtractor(config_path=settings.RADIOMICS_CONFIG_PATH)
     
-    # extracted_features = fe.extract_all_features(preprocessed_path=settings.PREPROCESSED_DATA_PATH)
-
-    # utils.save_features_to_csv(features_list=extracted_features, output_path=settings.RAD_FEATURES_CSV_PATH)
+            extracted_features = fe.extract_all_features(preprocessed_path=settings.PREPROCESSED_DATA_PATH)
+            
+            if extracted_features:
+                utils.save_features_to_csv(features_list=extracted_features, output_path=settings.RAD_FEATURES_CSV_PATH)
+                logger.info(f"Features successfully extracted and saved to {settings.RAD_FEATURES_CSV_PATH}")
+            else:
+                logger.error("No features were extracted. CSV file was not created.")
+        else:
+            logger.error(f"Critical: No preprocessed NIfTI data found in {settings.PREPROCESSED_DATA_PATH}. Aborting extraction.")
+            return
+    else:
+        skip_reason = "MANUAL SKIP VIA CLI" if args.skip_extraction else "FEATURES CSV ALREADY EXISTS AND IS VALID"
+        logger.info("\n" + "="*100)
+        logger.info(f" SKIPPING RADIOMICS PIPELINE ({skip_reason}) ".center(100, " "))
+        logger.info("="*100)
+    
+    # --- SECURITY BLOCK FOR DATA ANALYSIS ---
+    # If the code gets here and features_exist is False, it means the user used --skip-extraction
+    # BUT the CSV file on disk is missing or belongs to an old dataset/number of patients!
+    if not features_exist:
+        logger.error("\n" + "!"*100)
+        logger.error("CRITICAL ERROR: FEATURES CSV IS MISSING OR OUTDATED COMPARED TO CURRENT DICOM DATA!")
+        logger.error("You requested to skip extraction, but the existing CSV does not match the current patients.")
+        logger.error("To prevent the downstream analysis from using corrupted/wrong data, the script will now STOP.")
+        logger.error("!"*100)
+        return
 
     print("\n" + "=" * 100)
     print(" 3. MODELLING ".center(100, " "))
