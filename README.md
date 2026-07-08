@@ -1,5 +1,21 @@
 # nsclc_survival
-NSCLC Radiomics: Survival Time prediction using CT-extracted features and clinical data.
+### NSCLC Radiomics: Survival Time prediction using CT-extracted features and clinical data.
+
+This is a Python package designed for analyzing CT-extracted radiomic features and clinical data, specifically built for survival analysis and prognosis modelling.
+
+* [Project Overview](#project-overview)
+* **Theory**:
+   * [Survival Data](#survival-data)
+   * [Proportional Hazards Models](#proportional-hazards-models)
+   * [Models Evaluation](#models-evaluation)
+* [Installation](#installation)
+* [Usage](#usage)
+* [Testing](#testing)
+* [Table of Contents](#table-of-contents)
+* [Configuration and Customization](#configuration-and-customization)
+* [Pipeline Workflow](#pipeline-workflow)
+* [References](#references)
+* [Contacts](#contacts)
 
 ## Project Overview
 Survival Analysis plays a pivotal role in the medical field, especially in oncology, where predicting disease progression and survival outcomes becomes essential for cancer prognosis and treatment planning. 
@@ -12,16 +28,16 @@ By extracting radiomic and clinical features, the pipeline handles data censorsh
 
 These approaches are statistical methods designed to analyze the time until a specific event occurs (e.g., the patient death). They are built to handle censored data, so situations where the event has not occurred before the end of the study, or the subject is lost to follow-up.
 
-A classification of the patients through a risk stratification is also performed to divide the dataset into High and Low Risk classes, containing patients with an expected survival below and above the median respectively.
+A classification of the patients through a risk stratification is also performed to divide the dataset into High and Low Risk classes, containing patients with an expected survival below and above the median risk score respectively.
 
-For the evaluation of the forementioned classification the following Non-Parametric Methods are adopted:
+For the evaluation of the aforementioned classification the following Non-Parametric Methods are adopted:
 1. **Kaplan-Meier Method**, which estimates the unadjusted probability of surviving beyond a certain time point; particularly, a Kaplan-Meier curve shows the estimated survival function by plotting estimated survival probabilities against time. 
 2. **Log-Rank Test**, which tests the null hypothesis that there is no difference in the probability of an event at any time point across the different curves, evaluating through the computation of the p-value whether the distance between the survival curves of two or more different groups is statistically significant or simply due to chance.
 
 ## Survival Data
 Survival data is comprised of three elements: baseline data $x$, an event time $T$, and an event indicator $E$. The time $T$ corresponds to the time elapsed between the time in which the baseline data was collected and the time of the event occurring (when $E=1$), or the time of the last contact with the patient (when $E=0$). 
 
-Two fundalmental elements for the survival analysis are:
+Two fundamental elements for the survival analysis are:
 1. **Survival Function**: it describes the probability that an individual
 survives past a specified time point $t$ and is denoted by: 
 
@@ -56,21 +72,88 @@ where $\lambda(t|x)$ is the hazard at time $t$, $x_1,...,x_p$ are the predictors
 
 The ratio of the hazard rates between different patients is defined as the hazard ratio (HR). An HR greater than 1 indicates that the event is more likely to occur (increased risk), while an HR less than 1 indicates the event is less likely to occur (decreased risk). An HR of exactly 1 signifies that the predictor has no effect on the hazard of the event. 
 
-To perform Cox regression, the parameters $\beta$ are tuned to optimize the Cox partial likelihood, which computes the probability at each event time $T_i$ that the event occurred to individual $i$, given the set of individuals who are still at risk at that same time $T_i$. It can can be defined as: 
+To perform Cox regression, the parameters $\beta$ are tuned to optimize the Cox partial likelihood, which computes the probability at each event time $T_i$ that the event occurred to individual $i$, given the set of individuals who are still at risk at that same time $T_i$. It can be defined as: 
 
 $$
 L_c(\beta)=\prod_{i:E_i=1}\frac{\exp(h_\beta(x_i))}{\sum_{j\in \mathcal{R}(T_i)} \exp(h_\beta(x_j))}
 $$
 
-where the values $T_i$, $E_i$, and $x_i$ are the respective event time, event indicator, and baseline data for the $i^{th}$ observation. The risk set $\mathcal{R}(t)={i:T_i \ge t}$ represents the set of patients still at risk of death at time $t$. There the notation $h_\beta(x)$ has been used instead of $h(x)$ to make clear the dependence on the parameters $\beta$.
+where the values $T_i$, $E_i$, and $x_i$ are the respective event time, event indicator, and baseline data for the $i^{th}$ observation. The risk set $\mathcal{R}(t)=\\{i:T_i \ge t\\}$ represents the set of patients still at risk of death at time $t$. There the notation $h_\beta(x)$ has been used instead of $h(x)$ to make clear the dependence on the parameters $\beta$.
 
-However, classic Cox PH model may be too simplistic for fitting complex, real-world biological datasets, and for this reason the **Deep Cox Proportional Hazards Network (DeepSurv)** was implemented, extending the traditional Cox PH model by exploiting neural networks. DeepSurv is a multi-layer perceptron where a deep architecture and modern deep learning techniques - such as Weight Decay Regularization, Rectified Linear Units (ReLU), Batch Normalization, Dropout - ensure stable training, accelerate convergence, and prevent overfitting. The output of the network is a single node, which estimates the risk function $h_\theta(x)$ parameterized by the weights of the network $\theta$. The loss function is set to be the negative log partial likelihood:
+To prevent overfitting and perform feature selection on the high-dimensional radiomic data, a **Lasso (L1) regularization** penalty is introduced to the log-partial likelihood. The objective function to maximize becomes:
+
+$$
+\ell_{\text{Lasso}}(\beta) = \log L_c(\beta) - \alpha \sum_{k=1}^{p} |\beta_k|
+$$
+
+where $\alpha \ge 0$ is the regularization strength tuning parameter, and $\sum |\beta_k|$ represents the $L_1$ norm of the parameter vector. This penalty forces the coefficients of the least informative features to be exactly zero, effectively selecting the most relevant prognostic indicators.
+
+However, classic Cox PH model may be too simplistic for fitting complex, real-world biological datasets, and for this reason the **Deep Cox Proportional Hazards Network (DeepSurv)** was implemented, extending the traditional Cox PH model by exploiting neural networks. While the classical statistical approach focuses on maximizing the log-partial likelihood, deep learning frameworks are conventionally trained by minimizing a cost function. Therefore, DeepSurv shifts the problem into a minimization task by defining its loss function as the **negative** log-partial likelihood:
 
 $$
 \ell(\theta) := - \sum_{i:E_i=1}\bigg(h_\theta(x_i)-\log \sum_{j \in \mathcal{R}(T_i)}e^{h_\theta(x_j)}\bigg)
 $$
 
-DeepSurv's major strenght is the ability to generate personalized treatment recommendations. 
+Structurally, DeepSurv is a multi-layer perceptron where a deep architecture and modern deep learning techniques - such as Weight Decay Regularization (which acts as an $L_2$ penalty, balancing the $L_1$ Lasso used in the linear baseline), Rectified Linear Units (ReLU), Batch Normalization, Dropout - ensure stable training, accelerate convergence, and prevent overfitting. The output of the network is a single node, which estimates the non-linear risk function $h_\theta(x)$ parameterized by the weights of the network $\theta$. DeepSurv's major strength is its ability to generate personalized treatment recommendations. 
+
+## Models Evaluation
+The final evaluation of both models is performed by computing the following metrics.
+### Harrel's Concordance index (C-index)
+Ranging from 0.0 (terrible performance) to 1.0 (perfect prediction) it measures the model's predictive performance.
+### Integrated Brier Score (IBS)
+It measures  the model’s global probabilistic survival prediction accuracy and it's defined by the formula:
+
+$$
+\text{IBS} = \frac{1}{t_{max}-t_{min}}\int^{t_{max}}_{t_{min}}\text{BS}{(t)}dt
+$$
+
+where 
+
+$$
+\text{BS}(t) = \frac{1}{n} \sum^n_{i=1}\big(\textbf{Y}_i-\hat S_i(t)\big)^2.
+$$
+
+Specifically, its interpretation is bounded by the following benchmarks:
+   * $\text{IBS}=0$; the model is perfect, capable of predicting the exact event status with absolute certainty across all time steps;
+   * $\text{IBS}=0.25$; the model is random and assigns a fixed 50\% survival probability ($0.5$) to all patients, revealing itself equal to a completely uninformative random guess ($(1-0.5)^2=0.25$);
+   * $\text{IBS}<0.25$; the model performs better than an uninformative random guess, so it possesses real prognostic value;
+   * $\text{IBS}>0.25$; the model performs worse than an uninformative random guess, revealing severe miscalibration.
+
+
+### Linear Residuals (Mean Absolute Error, MAE, and Root Mean Squared Error, RMSE)
+They were computed by the survival time predictions in days and months derived from the survival functions:
+
+$$
+\text{MAE} = \frac{1}{n}\sum^n_{i=1}|y_i-\hat y_i|, \quad\quad \text{RMSE} = \sqrt{\frac{1}{n}\sum^n_{i=1}(y_i-\hat y_i)^2}
+$$
+   
+where $\hat y_i$ is the predicted survival time and $y_i$ is the real survival time. For this specific analysis only patients who experienced the event were considered.
+
+### Martingale and Deviance residuals
+They identify outliers. 
+
+The martingale residual ($M_i$) is:
+   
+$$
+M_i = \delta_i - \Lambda_i(t_i)
+$$
+
+where $\delta_i$ is the binary status event (1 = Death, 0 = Censored) and $\Lambda_i(t_i)=-\ln S_i(t_i)$ is the cumulative hazard function with the subject's specific exit time from the study $t_i$. It allows for a direct comparison with the clinical outcome:
+   * For patients who experienced the event ($\delta_i = 1$), a large positive residual ($M_i \approx 1$) indicates that the subject died much earlier than expected, revealing an underestimation of risk by the model.
+   * For censored patients ($\delta_i = 0$), the residual is inherently negative ($M_i$ = - $\Lambda_i$($t_i$)), quantifying the cumulative risk exposure up to time $t_i$ during which the patient remained successfully event-free. A large negative value highlights individuals who remained alive despite the model assigning them a severe risk profile.
+
+Martingale residuals captures discrepancies between observed and expected events, bur they are highly asymmetric - their domain is $(-\infty,+1)$ - and this skewness prevents the definition of standard, symmetric thresholds for outlier identification in the residual plots. 
+   
+To overcome this, Deviance residuals ($D_i$) are then calculated as follows:
+
+$$
+D_i = \text{sign}(M_i) \sqrt{-2 \left[ M_i + \delta_i \log(\delta_i - M_i) \right]}
+$$
+
+where $\text{sign}(M_i)$ extracts the algebraic sign of the underlying Martingale residual. This non-linear transformation forces the residual distribution to be approximately symmetric and centered around zero. Deviance residuals provide an intuitive clinical interpretation for diagnostic screening:
+   * Values close to $0$ identify individuals whose survival trajectory aligns perfectly with the model's expectations.
+   * Large positive values ($D_i > 2$) expose high-residual outliers, representing patients who experienced an early death despite possessing a low-risk profile.
+   * Large negative values ($D_i < -2$) isolate subjects who remained event-free for an exceptionally long duration despite being flagged with a severe, high-risk prognostic signature.
 
 ## Installation
 
@@ -81,7 +164,7 @@ Python version supported : ![Python Version](https://img.shields.io/badge/python
 Before installing the package, please ensure your system satisfies the following requirements:
 
 1. **C++ Compiler**: Due to the underlying C/C++ extensions in `pyradiomics` and `scikit-survival`, a C++ compiler must be present on the system.
-2. **Python Version**: This project requires **Python 3.8, 3.9 or 3.10** (3.9+ recommended due to dependencies such as `scikit-survival` and `pyradiomics`). Also for this reason it is recommended to use a virtual environment with a supported Python version.
+2. **Python Version**: This project requires **Python 3.8, 3.9 or 3.10** (3.9+ recommended due to dependencies such as `scikit-survival` and `pyradiomics`). Also for this reason it is recommended to use a virtual environment.
 
 The complete list of requirements for the `nsclc_survival` package is reported in the [requirements.txt](https://github.com/irene-ballantini/nsclc_survival/blob/main/requirements.txt).
 
@@ -130,7 +213,7 @@ You can append optional arguments to the command to modify the pipeline paramete
 ```bash
 $ nsclc_survival --help
 
-usage: nsclc_survival [-h] [--n-patients N_PATIENTS] [--cv-folds CV_FOLDS] [--epochs EPOCHS] [--batch-size BATCH_SIZE] [--hidden-dims HIDDEN_DIMS [HIDDEN_DIMS ...]] [-v]
+usage: nsclc_survival [-h] [--n-patients N_PATIENTS] [--cv-folds CV_FOLDS] [--epochs EPOCHS] [--batch-size BATCH_SIZE] [--hidden-dims HIDDEN_DIMS [HIDDEN_DIMS ...]] [-v] [--skip-download] [--skip-extraction]
 
 NSCLC Survival Analysis Pipeline: Survival Time prediction using CT-extracted features and clinical data.
 
@@ -145,7 +228,18 @@ options:
   --hidden-dims HIDDEN_DIMS [HIDDEN_DIMS ...]
                         Hidden dimensions for the Deep Cox neural network (e.g., --hidden-dims 128 64 32)
   -v, --version         Show the current package version and exit
+  --skip-download       Skip the download and organization of DICOM data (use local data if present)
+  --skip-extraction     Skip the preprocessing and extraction of radiomic features
 ```
+To see how `--skip-download` and `--skip-extraction` influence the pipeline workflow go to the [Pipeline Behavior Matrix](#pipeline-behavior-matrix) section. Instead execution examples and Use Cases of the Command Line are listed below the [Execution Examples and Use Cases](#-execution-examples-and-use-cases) section.
+
+### Quick Example of Use
+
+Since the default number of patients to download is set to 100, you can quickly test the pipeline's operation on a smaller cohort by running:
+```
+nsclc_survival --n-patients 15
+```
+**Note**: While 15 patients are far too few to yield statistically significant survival models, running this smaller setup allows you to quickly verify that all parts of the pipeline function correctly. Data downloading, preprocessing, and radiomic feature extraction are highly time-consuming phases; starting with a minimal cohort will save you a considerable amount of time during your initial setup.
 
 ## Testing
 
@@ -192,7 +286,7 @@ nsclc_survival
 ## Configuration and Customization
 In [nsclc_survival](https://github.com/irene-ballantini/nsclc_survival/tree/main/nsclc_survival) there's the [settings.py](https://github.com/irene-ballantini/nsclc_survival/blob/main/nsclc_survival/settings.py) file which is a configuration file to configure and centralize global constants, download parameters, and file directories and paths. By modifying this file, you can customize:
 * **Download parameters**: (e.g., N_PATIENTS to change the dataset size). The number of patient to download can also be changed via command line.
-* **Dataset Structure**: Column names of the clinical CSV files and survival mappings (e.g., stage_mapping for the overall tumor stage).
+* **Dataset Structure**: Column names and categorical mappings (e.g., `stage_mapping` for the overall tumor stage) that must match the exact structure and headers of the input clinical CSV files for successful data parsing.
 * **Saving directories**: Saving directories and filenames.
 
 > [!WARNING]
@@ -210,12 +304,68 @@ The dataset undergoes a structured pipeline, moving through the following stages
    * Extracts the primary tumor mask (`GTV-1` ROI) from the `RTSTRUCT` vector coordinates and converts it into a binary spatial volume using `rt_utils` and `SimpleITK`.
    * Resamples both the `CT` image (using BSpline interpolation) and the tumor mask (using Nearest Neighbor interpolation) to a **1.0mm isotropic spacing** to ensure spatial consistency for radiomics.
    * Outputs two standardized files per patient: `image.nii.gz` (the resampled CT) and `label.nii.gz` (the resampled tumor mask).
-4. **`feature_extraction.py`**: Extracts radiomics features from the preprocessed NIfTI files (`image.nii.gz` and `label.nii.gz`) using the **PyRadiomics** framework. The feature extraction parameters are specified in [radiomics_config.yaml](https://github.com/irene-ballantini/nsclc_survival/blob/main/configs/radiomics_config.yaml). In the end, all results are merged into a single structured list of dictionaries, map-indexed by `PatientID`, ready to be exported as a clean CSV dataset to the `RAD_FEATURES_CSV_PATH` directory defined in [settings.py](https://github.com/irene-ballantini/nsclc_survival/blob/main/nsclc_survival/settings.py).
+4. **`feature_extraction.py`**: Extracts radiomics features from the preprocessed NIfTI files (`image.nii.gz` and `label.nii.gz`) using the **PyRadiomics** framework. The feature extraction parameters are specified in [radiomics_config.yaml](https://github.com/irene-ballantini/nsclc_survival/blob/main/configs/radiomics_config.yaml). In the end, all results are merged into a single structured list of dictionaries, map-indexed by `PatientID`, ready to be exported as a clean CSV dataset to the `RAD_FEATURES_CSV_PATH` directory defined in [settings.py](https://github.com/irene-ballantini/nsclc_survival/blob/main/nsclc_survival/settings.py). 
+
+> **Note on Performance**: PyRadiomics relies internally on **SimpleITK**, which natively leverages multi-threading to maximize CPU core utilization during image processing. For this reason, manual multiprocessing at the patient level was intentionally omitted. Experimental attempts at manual parallelization introduced significant process-serialization overhead and resource contention, ultimately slowing down the overall extraction pipeline compared to a clean sequential execution. **The same principles apply to the preprocessing stage**.
+
 5. **`nsclc_survival.py`**: Implements the survival modeling framework. Specifically, this script handles:
    * **Data Preparation**: Splits the dataset into training and test sets and performs feature standardization.
    * **Model Training**: Trains both a clinical-radiomics **Standard Lasso-Cox Model** (for baseline statistical modeling) and a **Deep Cox Model** (for non-linear deep learning survival analysis).
    * **Evaluation & Risk Stratification**: Computes risk scores to classify patients into risk groups and generates evaluation outputs (e.g., Kaplan-Meier survival curves and deviance residual plots) saved in the `results/` and `plots/` directories.
 
-## How to Cite 
+### Pipeline Behavior Matrix
 
-## Author
+The following matrix shows how the pipeline automatically adapts based on your disk state and CLI arguments:
+
+| `--skip-download` | `--skip-extraction` | Local DICOM Data State | Features CSV State | Pipeline Action |
+| :---: | :---: | :--- | :--- | :--- |
+| :x: (Default) | :x: (Default) | **Empty** or **Patient Mismatch** | *Any* | **Full Run:** Cleans old data, downloads DICOMs, preprocesses NIfTI, extracts features, and runs Modelling. |
+| :x: (Default) | :x: (Default) | **Valid & Matched** | **Missing** | **Smart Resume:** Skips download, runs preprocessing, extracts features, and runs Modelling. |
+| :x: (Default) | :x: (Default) | **Valid & Matched** | **Valid & Present** | **Fast Skip (Pipeline Resume):** Skips download and radiomics extraction. Proceeds directly to the Modelling Phase. |
+| :white_check_mark: (Forced) | :x: (Default) | **Empty** | *Any* | **Safety Stop (No Data):** Script aborts immediately because no organized DICOM data is available to process. |
+| Any  | :white_check_mark: (Forced) | **Valid & Matched** | **Valid & Present** | **Skip Extraction (Safe):** Skips the radiomics phase as requested and safely proceeds to the Modelling Phase. |
+| :x: (Default) | :white_check_mark: (Forced) | **Patient Mismatch** | *Any (Outdated)* | **Safety Stop (Data Incoherence):** Downloads the new DICOMs, but safely aborts before Modelling to prevent running analysis on mismatched/missing CSV features. |
+
+---
+
+### :bulb: Execution Examples and Use Cases
+
+#### 1. Standard Production Run (Fresh Start or Resume)
+If it's your first time running the project or you just want the pipeline to automatically figure out what's missing:
+```bash
+nsclc_survival --n-patients 100
+```
+* Behavior: If 100 patients are already organized and the features CSV is present, it skips downloading and preprocessing and feature extraction. If you change it to `--n-patients 50`, it safely wipes the old folder, downloads 50 new patients, deletes the outdated CSV, extracts the new features, and trains the model on the updated cohort.
+#### 2. Offline / Local Development Mode
+If you are working offline, have capped data, or want to tweak the Deep Learning/Survival model using data you already downloaded:
+```bash
+nsclc_survival --skip-download
+```
+* Behavior: It locks the data folder. If the requested number of patients is found locally, it proceeds to radiomics. If the folder is empty, it safely aborts.
+#### 3. Pure Data Ingestion (Download Only)
+If you want to download and organize a new cohort size (e.g., 100 patients) but you want to check the DICOM data before running any radiomics extraction or survival modeling:
+```bash
+nsclc_survival --n-patients 100 --skip-extraction
+```
+* Behavior: If there is a patient mismatch, the script clears the old data and successfully downloads and organizes the 100 new patients into `ORGANIZED_DATA_PATH`. If the 100 patients are already present, it skips the download. In both cases, the radiomics phase is skipped as requested. Finally, if a valid features CSV file matching those 100 patients is missing, it triggers a safety stop before entering the Modelling phase. This prevents the Modelling phase from crashing or using outdated data.
+
+---
+
+## References
+
+* **Schober, P., & Vetter, T. R.** (2018). *Survival Analysis and Interpretation of Time-to-Event Data: The Tortoise and the Hare*. [PMC6110618](https://pmc.ncbi.nlm.nih.gov/articles/PMC6110618/)
+* **George, B., Seals, S., & Aban, I.** (2014). *Survival analysis and regression models*. [PMC4111957](https://pmc.ncbi.nlm.nih.gov/articles/PMC4111957/)
+* **Katzman, J. L., Shaham, U., Cloninger, A., Bates, J., Jiang, T., & Kluger, Y.** (2016). *Deep Survival: A Deep Cox Proportional Hazards Network*. [ResearchGate](https://www.researchgate.net/publication/303812000_Deep_Survival_A_Deep_Cox_Proportional_Hazards_Network)
+* **Castellani, G., Remondini, D., & Curti, N.** (2025). *Pattern Recognition notes*.
+* **Kalbfleisch, John D. & Prentice, Ross L.** (2002). *The Statistical Analysis of Failure Time Data*. John Wiley & Sons.
+* **Sala, C.** (2025). *Statistical Data Analysis for Applied Physics (module 2) notes*.
+* **The Cancer Imaging Archive**. *NSCLC-RADIOMICS*. [TCIA Website](https://www.cancerimagingarchive.net/collection/nsclc-radiomics/)
+
+---
+
+## Contacts
+
+* **Irene Ballantini**
+  * :e-mail: [irene.ballantini@studio.unibo.it](mailto:irene.ballantini@studio.unibo.it)
+  * :mortar_board: Master's Degree in Physics - **Alma Mater Studiorum - Università di Bologna**
+  * :briefcase: [GitHub](https://github.com/irene-ballantini)
