@@ -7,7 +7,7 @@ This is a Python package designed for analyzing CT-extracted radiomic features a
 * **Theory**:
    * [Survival Data](#survival-data)
    * [Proportional Hazards Models](#proportional-hazards-models)
-   * [Models Evaluation](#models-evaluation)
+   * [Model Evaluation](#model-evaluation)
 * [Installation](#installation)
 * [Usage](#usage)
 * [Testing](#testing)
@@ -97,7 +97,7 @@ $$
 
 Structurally, DeepSurv is a multi-layer perceptron where a deep architecture and modern deep learning techniques - such as Weight Decay Regularization (which acts as an $L_2$ penalty, balancing the $L_1$ Lasso used in the linear baseline), Rectified Linear Units (ReLU), Batch Normalization, Dropout - ensure stable training, accelerate convergence, and prevent overfitting. The output of the network is a single node, which estimates the non-linear risk function $h_\theta(x)$ parameterized by the weights of the network $\theta$. DeepSurv's major strength is its ability to generate personalized treatment recommendations. 
 
-## Models Evaluation
+## Model Evaluation
 The final evaluation of both models is performed by computing the following metrics.
 ### Harrel's Concordance index (C-index)
 Ranging from 0.0 (terrible performance) to 1.0 (perfect prediction) it measures the model's predictive performance.
@@ -356,7 +356,7 @@ nsclc_survival --n-patients 100 --skip-extraction
 
 ## To Show Some Results
 
-The pipeline was validated on a cohort of **100 patients** from the `NSCLC-Radiomics` dataset, evaluating both the statistical baseline (Lasso-Cox) and the deep learning framework (Deep Cox / DeepSurv). Training parameter were tuned in the following way to optimize models performances:
+The pipeline was validated on a cohort of **100 patients** from the `NSCLC-Radiomics` dataset, evaluating both the statistical baseline (Lasso-Cox) and the deep learning framework (Deep Cox / DeepSurv). Training parameters were tuned as follows to optimize model performances:
 * Epochs (`--epochs`) = 170
 * Hidden Dimensions of the Network (`--hidden-dims`) = 4 
 * Batch Size (`--batch-size`) = 32
