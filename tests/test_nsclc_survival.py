@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import logging
 import pytest
 import pandas as pd
 import numpy as np
@@ -667,16 +668,17 @@ def test_survival_risk_classifier_pipeline(mock_survival_data):
     assert len(df_report) == len(X_test)
     assert df_report['Risk_Score'].iloc[0] >= df_report['Risk_Score'].iloc[-1] # Check ordering in descending order
 
-def test_survival_risk_classifier_significant_pvalue(mock_survival_data, capsys, mocker):
+def test_survival_risk_classifier_significant_pvalue(mock_survival_data, caplog, mocker):
     """
     Verify that evaluate_stratification returns the correct p-value
     and prints the success message when the p-value is significant (< 0.05).
 
     Args:
         mock_survival_data (tuple): A tuple containing the simulated survival data.
-        capsys: Pytest fixture to capture stdout and stderr output.
-        mocker: Pytest-mock fixture for dependency injection.
+        caplog (pytest.LogCaptureFixture): Pytest fixture for capturing log messages.
+        mocker (pytest_mock.plugin.MockerFixture): Pytest mocker fixture for dependency injection.
     """
+    caplog.set_level(logging.INFO)
     _, _, X_train, X_test, y_train, y_test = mock_survival_data
     input_dim = X_train.shape[1]
     
@@ -702,11 +704,8 @@ def test_survival_risk_classifier_significant_pvalue(mock_survival_data, capsys,
     mocker.patch('nsclc_survival.nsclc_survival.logrank_test', return_value=fake_result)
     p_value = classifier.evaluate_stratification(y_test_df, y_pred_class, title_suffix="Test_Run")
         
-    # Check the printing
-    captured = capsys.readouterr()
-
     expected_message = "-> The classification separated the patients in a statistically significant way (p < 0.05)."
-    assert expected_message in captured.out
+    assert any(expected_message in record.message for record in caplog.records)
         
     assert p_value == 0.01
 

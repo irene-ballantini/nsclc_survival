@@ -58,12 +58,12 @@ def test_organize_dicom_data_success(mocker, tmp_path):
     # Verify that the old raw folder has been removed
     assert not fake_raw.exists()
 
-def test_organize_dicom_data_raw_not_found(capsys, tmp_path):
+def test_organize_dicom_data_raw_not_found(caplog, tmp_path):
     """
     If folder doesn't exist returns a Warning.
 
     Args:
-        capsys (pytest.CaptureFixture): Pytest fixture for capturing stdout and stderr.
+        caplog (pytest.LogCaptureFixture): Pytest fixture for capturing log messages.
         tmp_path (pathlib.Path): Temporary directory path provided by pytest.
     """
     fake_raw = tmp_path / "non_existing_raw"
@@ -73,8 +73,8 @@ def test_organize_dicom_data_raw_not_found(capsys, tmp_path):
     organize_dicom_data(fake_raw, fake_organized)
 
     # Verify that it prints the correct Warning using the pytest fixture 'capsys'
-    captured = capsys.readouterr()
-    assert "Warning: raw folder not found" in captured.out
+    assert any("Warning: raw folder not found" in record.message for record in caplog.records)
+    assert any(record.levelname == "WARNING" for record in caplog.records)
 
 def test_organize_dicom_data_corrupted_file_keeps_folder(mocker, tmp_path):
     """
