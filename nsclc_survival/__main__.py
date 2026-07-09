@@ -263,6 +263,16 @@ def main ():
         train_size=0.8,
         random_seed=42
     )
+    
+    # --- SECURITY BLOCK FOR TRAINING DATA SIZE ---
+    MIN_PATIENTS = 15  
+    if X_train.shape[0] < MIN_PATIENTS:
+        logger.error(f"\n" + "!"*100)
+        logger.error(f"ERROR: Dataset too small for training ({X_train.shape[0]} patients in the Train Set).")
+        logger.error(f"To ensure convergence of Lasso-Cox and Deep Cox, at least {MIN_PATIENTS} patients are required.")
+        logger.error("The processing is halted to prevent mathematical crashes.")
+        logger.error("!"*100 + "\n")
+        return
 
     logger.info("\n" + "=" * 100)
     logger.info(" MODEL 1: LASSO-COX MODEL".center(100, " "))
