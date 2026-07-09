@@ -14,6 +14,7 @@ This is a Python package designed for analyzing CT-extracted radiomic features a
 * [Table of Contents](#table-of-contents)
 * [Configuration and Customization](#configuration-and-customization)
 * [Pipeline Workflow](#pipeline-workflow)
+* [To Show Some Results](#to-show-some-results)
 * [References](#references)
 * [Contacts](#contacts)
 
@@ -258,8 +259,8 @@ Description of the folders related to the `Python` version.
 
 | **Directory**                                                                                | **Description**                                                                                       |
 |:---------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------|
-|[examples](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples)             | Examples of CSV files containing the clinical features to merge with the extracted radiomics features.|
-|[configs](https://github.com/irene-ballantini/nsclc_survival/tree/main/configs)               | Configuration files (YAML) for `pyradiomics` feature extraction.                                             |
+|[examples](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples)             | Contains a ready-to-run pipeline script ([run_pipeline_example.py]()),examples of CSV files containing the clinical features to merge with the extracted radiomics features (in [data_config](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples/data_config) folder), and pre-calculated reference outputs (in [reference_outputs]()) for benchmarking.|
+|[configs](https://github.com/irene-ballantini/nsclc_survival/tree/main/configs)               | Configuration files (YAML) specifying settings and filters for `pyradiomics` feature extraction.                                             |
 |[nsclc_survival](https://github.com/irene-ballantini/nsclc_survival/tree/main/nsclc_survival) | List of `Python` scripts for the `nsclc_survival` pipeline.                                           | 
 
 Below there's an overview of the project's directory tree created once the package is ran.
@@ -290,7 +291,9 @@ In [nsclc_survival](https://github.com/irene-ballantini/nsclc_survival/tree/main
 * **Saving directories**: Saving directories and filenames.
 
 > [!WARNING]
-> **DO NOT MODIFY** the paths listed under the `# --- Subdirectories --- ` section. These constants define the internal package structure, allowing the pipeline to automatically create and manage the `data/` directory tree.
+> **MODIFY WITH CARE**: The paths listed under the `# --- Subdirectories ---` section define the internal directory tree where the pipeline automatically reads and writes data. If you change them, ensure the new paths remain consistent across your local environment. 
+>
+>For example, to isolate a test or redirect outputs safely, you could simply change **only** the `DATA_DIR` constant under the `# --- Base Paths ---` section (e.g, `DATA_DIR = BASE_DIR / "data_analysis_1"`). By doing so, the entire internal directory tree will be automatically re-routed and created upon execution, keeping the package structure invariant without needing to manually edit individual subdirectories.
 
 > [!NOTE]
 > You can also change the `COLLECTION_NAME` constant to download a different dataset from **The Cancer Imaging Archive (TCIA)**, provided that its structure matches or is highly similar to the `NSCLC-Radiomics` dataset.
@@ -350,6 +353,64 @@ nsclc_survival --n-patients 100 --skip-extraction
 * Behavior: If there is a patient mismatch, the script clears the old data and successfully downloads and organizes the 100 new patients into `ORGANIZED_DATA_PATH`. If the 100 patients are already present, it skips the download. In both cases, the radiomics phase is skipped as requested. Finally, if a valid features CSV file matching those 100 patients is missing, it triggers a safety stop before entering the Modelling phase. This prevents the Modelling phase from crashing or using outdated data.
 
 ---
+
+## To Show Some Results
+
+The pipeline was validated on a cohort of **100 patients** from the `NSCLC-Radiomics` dataset, evaluating both the statistical baseline (Lasso-Cox) and the deep learning framework (Deep Cox / DeepSurv). Training parameter were tuned in the following way to optimize models performances:
+* Epochs (`--epochs`) = 170
+* Hidden Dimensions of the Network (`--hidden-dims`) = 4 
+* Batch Size (`--batch-size`) = 32
+>*Note*: `--hidden-dims 4` may seem a quite small architecture, **but** for the specific dataset under study it represents the optimal choice, because it prevents overfitting on the small number of available data (100), while still preserving the network’s ability to represent complex, non-linear relationships across features.
+
+### 1. Model Performance Summary
+The table below summarizes the key evaluation metrics computed on the test set (20% split). For temporal metrics (MAE, RMSE), the analysis isolates non-censored individuals ($E=1$).
+
+| Model | Harrell's C-index | Integrated Brier Score (IBS) | MAE [Days] | RMSE [Days] |
+| :--- | :---: | :---: | :---: | :---: |
+| **Lasso-Cox Model** | 0.594 | 0.148 | 483.4 | 645.5 |
+| **Deep Cox (DeepSurv)** | 0.717 | 0.135 | 452.1 | 821.3 |
+
+> [!NOTE]
+> *Both models achieved an IBS $< 0.25$, demonstrating real prognostic value and superior calibration compared to an uninformative random guess.*
+
+---
+
+### 2. Graphical Outputs and Diagnostics
+
+#### A. Lasso-Cox vs Deep Cox Survival Curves
+The following plots compare the predicted individual survival curves for the highest and lowest risk patient profiles identified by each model. 
+| Lasso-Cox Evaluation | Deep Cox Evaluation |
+| :---: | :---: |
+| ![Lasso-Cox Curves](images/survival_curves_comparison.png) | ![Deep Cox Curves](images/deep_cox_survival_curves_comparison.png) |
+
+---
+
+#### B. Risk Stratification and Population Kaplan-Meier Plots
+Patients were stratified into High-Risk and Low-Risk cohorts based on the median risk score threshold. The statistical significance of the separation was validated via the Log-Rank Test. This separaration can be visualized in Kaplan-Meier plots.
+
+| Kaplan-Meier Population Stratification (Cox) | Kaplan-Meier Population Stratification (DeepCox) |
+| :---: | :---: |
+| ![KM Cox](images/KM_popolazione_cox.png) | ![KM DeepCox](images/KM_popolazione_deepcox.png) |
+
+While the significant $p$-value ($p < 0.05$) for the Deep Cox model confirms that the risk stratification successfully isolates distinct patient survival trajectories, the standard Lasso-Cox model yields a high $p$-value, indicating that its population separation is not statistically significant 
+
+---
+
+#### C. Residuals and Outlier Detection Diagnostics
+Deviance residuals were plotted against risk scores to identify pathological outliers ($|D_i| > 2$).
+
+| Lasso-Cox Deviance Residuals | Deep Cox Deviance Residuals |
+| :---: | :---: |
+| ![Deviance Cox](images/risk_scores_vs_deviance_residuals.png) | ![Deviance Deep](images/deep_cox_risk_scores_vs_deviance_residuals.png) |
+
+---
+
+---
+
+### 3. Feature Selection Insights (Lasso-Cox)
+The $L_1$ regularization penalty selected **14 features** out of the original radiomics and clinical pool. 
+
+The analysis reveals that the **Histology** categorical features exert the strongest overall influence on the model's predictions, yielding Hazard Ratios ($HR = e^\beta$) ranging from **1.27** up to **1.43**. This indicates that all encoded histological subtypes significantly increase the patient's risk profile compared to the baseline reference.
 
 ## References
 
