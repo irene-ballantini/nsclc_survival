@@ -29,9 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-#logging.basicConfig(level=logging.INFO, format='%(message)s')
-#logger = logging.getLogger(__name__)
-
 def parse_args():
     """
     Parse command line arguments for the nsclc_survival package.
@@ -150,8 +147,8 @@ def main ():
     if not args.skip_download and not data_exists:
         # Handling the mismatch before starting the download process
         if current_patients_on_disk > 0 and current_patients_on_disk != args.n_patients:
-            logger.info(f"[INFO] Patient count mismatch: Requested {args.n_patients}, but found {current_patients_on_disk} on disk.")
-            logger.info(f"[INFO] Cleaning up old organized data in {settings.ORGANIZED_DATA_PATH}...")
+            logger.info(f"Patient count mismatch: Requested {args.n_patients}, but found {current_patients_on_disk} on disk.")
+            logger.info(f"Cleaning up old organized data in {settings.ORGANIZED_DATA_PATH}...")
             
             # Empty the organized folder to avoid mixing old and new data
             try:
@@ -159,13 +156,13 @@ def main ():
                     shutil.rmtree(settings.ORGANIZED_DATA_PATH)
                 settings.ORGANIZED_DATA_PATH.mkdir(parents=True, exist_ok=True)
             except Exception as e:
-                logger.error(f"[ERROR] Critical: Could not clean organized folder due to: {e}")
-                logger.error("[ERROR] Please close any files/viewers inside the data folder and restart the script.")
+                logger.error(f"Critical: Could not clean organized folder due to: {e}")
+                logger.error("Please close any files/viewers inside the data folder and restart the script.")
                 return
 
-            logger.info(f"[INFO] Re-downloading and organizing data for the new requested amount of {args.n_patients} patients...")
+            logger.info(f"Re-downloading and organizing data for the new requested amount of {args.n_patients} patients...")
         else:
-            logger.info(f"[INFO] Download and organization of DICOM data in progress for {args.n_patients} patients...")
+            logger.info(f"Download and organization of DICOM data in progress for {args.n_patients} patients...")
 
         _download_data.download_nsclc_radiomics_data(n_patients_to_download=args.n_patients)
         _organize_data.organize_dicom_data(raw_path=settings.RAW_DATA_PATH, organized_path=settings.ORGANIZED_DATA_PATH)
@@ -173,16 +170,16 @@ def main ():
         data_exists = True
 
     elif args.skip_download:
-        logger.info("[INFO] Download skipped by user via --skip-download.")
+        logger.info("Download skipped by user via --skip-download.")
     else:
-        logger.info("[INFO] Data already available locally. Skipping download.")
+        logger.info("Data already available locally. Skipping download.")
 
     # --- Security Block ---
     # If data are not available (because the user skipped the download or the download failed)
     # and the script is about to start a phase that requires the data, it stops.
     if not data_exists and not args.skip_extraction:
-        logger.error("[ERROR] Critical: No organized data found in settings.ORGANIZED_DATA_PATH!")
-        logger.error("[ERROR] You used --skip-download but the folder is empty. Cannot proceed with radiomics.")
+        logger.error("Critical: No organized data found in settings.ORGANIZED_DATA_PATH!")
+        logger.error("You used --skip-download but the folder is empty. Cannot proceed with radiomics.")
         return 
     
     # Check if features are ready and valid
@@ -208,9 +205,9 @@ def main ():
 
         processor.process_all_patients()
     
-        print("\n" + "=" * 100)
-        print(" 2. RUNNING FEATURE EXTRACTION  ".center(100, " "))
-        print("=" * 100)
+        logger.info("\n" + "=" * 100)
+        logger.info(" 2. RUNNING FEATURE EXTRACTION  ".center(100, " "))
+        logger.info("=" * 100)
 
         preprocessed_exists = settings.PREPROCESSED_DATA_PATH.exists() and any(settings.PREPROCESSED_DATA_PATH.iterdir())
         
@@ -244,11 +241,11 @@ def main ():
         logger.error("!"*100)
         return
 
-    print("\n" + "=" * 100)
-    print(" 3. MODELLING ".center(100, " "))
-    print("=" * 100)
+    logger.info("\n" + "=" * 100)
+    logger.info(" 3. MODELLING ".center(100, " "))
+    logger.info("=" * 100)
 
-    print("--- LOADING AND PROCESSING DATA ---")
+    logger.info("--- LOADING AND PROCESSING DATA ---")
     data_processor = RadiomicsClinicalDataProcessor(
         radiomics_path=settings.RAD_FEATURES_CSV_PATH, 
         clinical_path=settings.CLINICAL_FEATURES_CSV_PATH
@@ -267,11 +264,11 @@ def main ():
         random_seed=42
     )
 
-    print("\n" + "=" * 100)
-    print(" MODEL 1: LASSO-COX MODEL".center(100, " "))
-    print("=" * 100)
+    logger.info("\n" + "=" * 100)
+    logger.info(" MODEL 1: LASSO-COX MODEL".center(100, " "))
+    logger.info("=" * 100)
 
-    print("\n--- COX STEP 1: TRAINING LASSO-COX MODEL WITH CROSS-VALIDATION ---")
+    logger.info("\n--- COX STEP 1: TRAINING LASSO-COX MODEL WITH CROSS-VALIDATION ---")
     # Initialize the Lasso-Cox model
     lasso_cox = LassoCoxModel(
         feature_names=data_processor.feature_names,
@@ -284,22 +281,22 @@ def main ():
     # You can change the number of folds by modifying cv (e.g., cv=5)
     lasso_cox.fit_crossval(X_train, y_train, X_total, y_total, cv=args.cv_folds)
 
-    print("\n--- COX STEP 2: EXTRACTING SELECTED RADIOMIC FEATURES ---")
+    logger.info("\n--- COX STEP 2: EXTRACTING SELECTED RADIOMIC FEATURES ---")
     # Get the DataFrame with only the features selected by LASSO (with coefficients and Hazard Ratio)
     # We pass data_processor.feature_names to map the indices correctly to the feature names
     df_selected_features = lasso_cox.get_selected_features(data_processor.feature_names)
     
     # Show the first rows of the most important features
-    print("\nTop Selected Features:")
-    print(df_selected_features.head())
+    logger.info("\nTop Selected Features:")
+    logger.info(f"\n{df_selected_features.head().to_string()}")
     
     # Save the selected features to a CSV 
-    output_directory = Path(settings.RESULTS_PATH)
+    output_directory = Path(settings.RESULTS_PATH) 
     output_directory.mkdir(parents=True, exist_ok=True)
     df_selected_features.to_csv(output_directory / "features_selected.csv", index=False, float_format="%.4f")
 
-    print("\n--- COX STEP 3: RISK SCORES AND SURVIVAL MONTHS PREDICTION ---")
-    print(f"[INFO] Computing risk scores and hazards for the test set using the trained Lasso-Cox model...")
+    logger.info("\n--- COX STEP 3: RISK SCORES AND SURVIVAL MONTHS PREDICTION ---")
+    logger.info(f"Computing risk scores and hazards for the test set using the trained Lasso-Cox model...")
     
     risk_scores = lasso_cox.compute_risk_scores(X_input=X_test)
     hazards = lasso_cox.compute_hazards(X_input=X_test, risk_scores=risk_scores)
@@ -307,7 +304,7 @@ def main ():
     # Predict the median survival months by reusing the recently generated curves
     pred_days, pred_months, survival_curves = lasso_cox.predict_survival_time(X_test=X_test)
 
-    print("\n--- COX STEP 4: MODEL EVALUATION (C-INDEX & RESIDUALS) ---")
+    logger.info("\n--- COX STEP 4: MODEL EVALUATION (C-INDEX & RESIDUALS) ---")
     # Evaluate the model's performance on the test set using the C-index
     c_index_test = lasso_cox.evaluate_model(X_test, y_test)
     
@@ -324,8 +321,8 @@ def main ():
     if df_predictions is not None:
         df_predictions.to_csv(output_directory / "cox_test_set_predictions.csv", index=False, float_format="%.2f")
 
-    print("\n--- COX STEP 5: VISUALIZING EXTREME SURVIVAL CURVES ---")
-    print(f"[INFO] Plotting and saving survival curves for patients (highest vs lowest risk) to: {settings.PLOT_SURVIVAL_CURVES}")
+    logger.info("\n--- COX STEP 5: VISUALIZING EXTREME SURVIVAL CURVES ---")
+    logger.info(f"Plotting and saving survival curves for patients (highest vs lowest risk) to: {settings.PLOT_SURVIVAL_CURVES}")
     
     # [UTILS] Use the plot function with survival curves and risk scores
     utils.plot_extreme_survival_curves(
@@ -334,7 +331,7 @@ def main ():
         output_path=settings.PLOT_SURVIVAL_CURVES
     )
 
-    print("\n--- COX STEP 6: INTEGRATED BRIER SCORE (IBS) ---")
+    logger.info("\n--- COX STEP 6: INTEGRATED BRIER SCORE (IBS) ---")
     # Compute Integrated Brier Score
     ibs= lasso_cox.evaluate_IBS(y_train, y_test, survival_curves)
     
@@ -349,37 +346,37 @@ def main ():
     )
     
     if df_residuals is not None:
-        print("\n--- COX STEP 7: SAVING DIAGNOSTIC RESIDUALS ---")
+        logger.info("\n--- COX STEP 7: SAVING DIAGNOSTIC RESIDUALS ---")
         residuals_path = output_directory / "cox_test_set_martingale_deviance_residuals.csv"
         df_residuals.to_csv(residuals_path, index=False, float_format="%.2f")
-        print(f"[INFO] Diagnostic residuals of Cox model saved in: {residuals_path}")
+        logger.info(f"Diagnostic residuals of Cox model saved in: {residuals_path}")
         # >>> GENERATE THE PLOT <<<
-        print("\n--- COX STEP 8: PLOTTING DIAGNOSTIC RESIDUALS ---")
+        logger.info("\n--- COX STEP 8: PLOTTING DIAGNOSTIC RESIDUALS ---")
         utils.plot_deviance_residuals(
             df_risk_residuals=df_residuals,
             output_path=settings.PLOT_DEV_RESIDUALS
         )
 
-    print("\n--- SUMMARY: COX MODEL WORST AND BEST PREDICTIONS ---")
+    logger.info("\n--- SUMMARY: COX MODEL WORST AND BEST PREDICTIONS ---")
     # Worst and Best Cases (where the model did the biggest and the smallest error)
     if df_predictions is not None:
         worst_predictions = df_predictions.sort_values(by='Absolute_Error_Days', ascending=False)
         col = [settings.patientID, 'Actual_Days', 'Predicted_Median_Days', 'Absolute_Error_Days']
-        print("\nPatients with the biggest temporal prediction error:")
-        print(worst_predictions[col].head(5).to_string(index=False))
+        logger.info("\nPatients with the biggest temporal prediction error:")
+        logger.info(worst_predictions[col].head(5).to_string(index=False))
 
         best_predictions = df_predictions.sort_values(by='Absolute_Error_Days', ascending=True)
-        print("\nPatients with the smallest temporal prediction error:")
-        print(best_predictions[col].head(5).to_string(index=False))
+        logger.info("\nPatients with the smallest temporal prediction error:")
+        logger.info(best_predictions[col].head(5).to_string(index=False))
 
-    print("\n[SUCCESS] Cox Model Elaboration completed!")
-    
-    print("\n" + "=" * 100)
-    print(" MODEL 2: DEEP COX MODEL".center(100, " "))
-    print("=" * 100)
+    logger.info("\n[SUCCESS] Cox Model Elaboration completed!")
 
-    print("\n--- DEEP COX STEP 1: TRAINING DEEP COX MODEL ---")
-    print(f"[INFO] Training Deep Cox model on the training set with {X_train.shape[0]} patients and {X_train.shape[1]} features...")
+    logger.info("\n" + "=" * 100)
+    logger.info(" MODEL 2: DEEP COX MODEL".center(100, " "))
+    logger.info("=" * 100)
+
+    logger.info("\n--- DEEP COX STEP 1: TRAINING DEEP COX MODEL ---")
+    logger.info(f"Training Deep Cox model on the training set with {X_train.shape[0]} patients and {X_train.shape[1]} features...")
     input_dimension = X_train.shape[1]    # Number of features 
 
     deep_cox = DeepCoxModel(
@@ -395,32 +392,32 @@ def main ():
     loss_funct_path = settings.PLOT_PATH / "deep_cox_loss_curve.png"
     utils.plot_loss_funct(deep_cox.loss_history, loss_funct_path)
 
-    print("\n--- DEEP COX STEP 2: RISK SCORES ---")
-    print(f"[INFO] Computing risk scores and hazards for the test set using the trained Deep Cox model...")
+    logger.info("\n--- DEEP COX STEP 2: RISK SCORES ---")
+    logger.info(f"Computing risk scores and hazards for the test set using the trained Deep Cox model...")
     deep_risk_scores = deep_cox.compute_risk_scores(X_input=X_test)
     deep_hazards = deep_cox.compute_hazards(X_input=X_test, risk_scores=deep_risk_scores)
-    
-    print("\n--- DEEP COX STEP 3: MODEL EVALUATION (C-INDEX) ---")
+
+    logger.info("\n--- DEEP COX STEP 3: MODEL EVALUATION (C-INDEX) ---")
     # Evaluation of the Deep Cox (C-Index)
     deep_c_index = deep_cox.evaluate_model(X_test, y_test, risk_scores=deep_risk_scores)
-    
-    print("\n--- DEEP COX STEP 4: SURVIVAL MONTHS PREDICTION ---")
-    print(f"[INFO] Predicting survival time for the test set using the trained Deep Cox model...")
+
+    logger.info("\n--- DEEP COX STEP 4: SURVIVAL MONTHS PREDICTION ---")
+    logger.info(f"Predicting survival time for the test set using the trained Deep Cox model...")
     deep_pred_days, deep_pred_months, deep_survival_curves = deep_cox.predict_survival_time(
         X_test=X_test, 
         risk_scores=deep_risk_scores, 
         hazards=deep_hazards
         )
        
-    print("\n--- DEEP COX STEP 5: VISUALIZING EXTREME SURVIVAL CURVES ---")
+    logger.info("\n--- DEEP COX STEP 5: VISUALIZING EXTREME SURVIVAL CURVES ---")
     utils.plot_extreme_survival_curves(
         survival_functions=deep_survival_curves, 
         risk_scores=deep_risk_scores, 
         output_path=settings.PLOT_DEEP_SURVIVAL_CURVES
     )
-    print(f"[INFO] Plotting and saving Deep Cox extreme survival curves for patients (highest vs lowest risk) to: {settings.PLOT_DEEP_SURVIVAL_CURVES}")
+    logger.info(f"Plotting and saving Deep Cox extreme survival curves for patients (highest vs lowest risk) to: {settings.PLOT_DEEP_SURVIVAL_CURVES}")
     
-    print("\n--- DEEP COX STEP 6: MODEL EVALUATION (RESIDUALS) ---")
+    logger.info("\n--- DEEP COX STEP 6: MODEL EVALUATION (RESIDUALS) ---")
     df_deep_predictions = deep_cox.compute_residuals_and_metrics( 
         y_input=y_test, 
         patient_ids=data_processor.patient_ids_test, 
@@ -432,11 +429,11 @@ def main ():
     if df_deep_predictions is not None:
         df_deep_predictions.to_csv(output_directory / "deep_cox_test_set_predictions.csv", index=False, float_format="%.2f")
 
-    print("\n--- DEEP COX STEP 7: INTEGRATED BRIER SCORE ---")
+    logger.info("\n--- DEEP COX STEP 7: INTEGRATED BRIER SCORE ---")
     deep_ibs = deep_cox.evaluate_IBS(y_train, y_test, deep_survival_curves)
 
     # 9. Calculate diagnostic residuals (Martingala e Deviance) for each patient.
-    print("\n--- DEEP COX STEP 8: MARTINGALE AND DEVIANCE DIAGNOSTIC RESIDUALS ---")
+    logger.info("\n--- DEEP COX STEP 8: MARTINGALE AND DEVIANCE DIAGNOSTIC RESIDUALS ---")
     df_deep_residuals = deep_cox.compute_martingale_and_deviance_residuals(
         X_input=X_test, 
         y_input=y_test, 
@@ -450,29 +447,29 @@ def main ():
     if df_deep_residuals is not None:
         deep_residuals_path = output_directory / "deep_cox_martingale_deviance_residuals.csv"
         df_deep_residuals.to_csv(deep_residuals_path, index=False, float_format="%.2f")
-        print(f"[INFO] Diagnostic residuals of Deep Cox saved in: {deep_residuals_path}")
-        print(f"\n--- DEEP COX STEP 9: DEEP COX PLOTTING RESIDUALS DIAGNOSTICS")
+        logger.info(f"Diagnostic residuals of Deep Cox saved in: {deep_residuals_path}")
+        logger.info(f"\n--- DEEP COX STEP 9: DEEP COX PLOTTING RESIDUALS DIAGNOSTICS")
         utils.plot_deviance_residuals(
             df_risk_residuals=df_deep_residuals, 
             output_path=settings.PLOT_DEEP_DEV_RESIDUALS
         )
     
-    print("\n--- SUMMARY: DEEP COX MODEL WORST AND BEST PREDICTIONS ---")
+    logger.info("\n--- SUMMARY: DEEP COX MODEL WORST AND BEST PREDICTIONS ---")
     if df_deep_predictions is not None:
         deep_worst = df_deep_predictions.sort_values(by='Absolute_Error_Days', ascending=False)
         col = [settings.patientID, 'Actual_Days', 'Predicted_Median_Days', 'Absolute_Error_Days']
-        print("\nDeep Cox: Patients with the biggest temporal prediction error:")
-        print(deep_worst[col].head(5).to_string(index=False))
+        logger.info(f"\nDeep Cox: Patients with the biggest temporal prediction error:")
+        logger.info(deep_worst[col].head(5).to_string(index=False))
 
         deep_best = df_deep_predictions.sort_values(by='Absolute_Error_Days', ascending=True)
-        print("\nDeep Cox: Patients with the smallest temporal prediction error:")
-        print(deep_best[col].head(5).to_string(index=False))
+        logger.info(f"\nDeep Cox: Patients with the smallest temporal prediction error:")
+        logger.info(deep_best[col].head(5).to_string(index=False))
 
-    print("\n[SUCCESS] Deep Cox Model Elaboration completed!")
+    logger.info("\n[SUCCESS] Deep Cox Model Elaboration completed!")
 
-    print("\n" + "=" * 100)
-    print(" RISK CLASSIFICATION - LASSO-COX MODEL".center(100, " "))
-    print("=" * 100)
+    logger.info("\n" + "=" * 100)
+    logger.info(" RISK CLASSIFICATION - LASSO-COX MODEL".center(100, " "))
+    logger.info("=" * 100)
 
     classifier_cox = SurvivalRiskClassifier(trained_model=lasso_cox)
     classifier_cox.fit_threshold(X_train)
@@ -487,14 +484,14 @@ def main ():
     output_path=settings.PLOT_PATH / "KM_popolazione_cox.png"
 )
 
-    print("--- CLASSIFICATION REPORT COX---")
+    logger.info("--- CLASSIFICATION REPORT COX---")
     matrix = classifier_cox.compute_classification_report(
     y_test=y_test, 
     y_train=y_train, 
     y_pred_class=y_pred_cox_classes
     )
     
-    print("--- PREDICTION REPORT COX ---")
+    logger.info("--- PREDICTION REPORT COX ---")
     df_patients_class_cox = classifier_cox.generate_prediction_report(
         patient_ids=data_processor.patient_ids_test, 
         y_test=y_test, 
@@ -505,11 +502,11 @@ def main ():
     
     cox_class_dir = output_directory / "classes_cox.csv"
     df_patients_class_cox.to_csv(cox_class_dir, index=False, float_format="%.4f")
-    print(f"[INFO] Classification Cox predictions saved in {cox_class_dir}")
+    logger.info(f"Classification Cox predictions saved in {cox_class_dir}")
 
-    print("\n" + "=" * 100)
-    print(" RISK CLASSIFICATION - DEEP COX MODEL".center(100, " "))
-    print("=" * 100)
+    logger.info("\n" + "=" * 100)
+    logger.info(" RISK CLASSIFICATION - DEEP COX MODEL".center(100, " "))
+    logger.info("=" * 100)
 
     classifier_deep = SurvivalRiskClassifier(trained_model=deep_cox)
     classifier_deep.fit_threshold(X_train)
@@ -524,14 +521,14 @@ def main ():
     output_path=settings.PLOT_PATH / "KM_popolazione_deepcox.png"
 )
 
-    print("--- CLASSIFICATION REPORT DEEP COX ---")
+    logger.info("--- CLASSIFICATION REPORT DEEP COX ---")
     classifier_deep.compute_classification_report(
     y_test=y_test, 
     y_train=y_train, 
     y_pred_class=y_pred_deep_classes
     )
     
-    print("\n--- PREDICTION REPORT DEEP COX ---")
+    logger.info("\n--- PREDICTION REPORT DEEP COX ---")
     df_patients_class_deep = classifier_deep.generate_prediction_report(
         patient_ids=data_processor.patient_ids_test, 
         y_test=y_test, 
@@ -542,11 +539,11 @@ def main ():
     
     deep_cox_class_dir = output_directory / "classes_deep_cox.csv"
     df_patients_class_deep.to_csv(deep_cox_class_dir, index=False, float_format="%.4f")
-    print(f"[INFO] Classification Deep Cox predictions saved in {deep_cox_class_dir}")
+    logger.info(f"Classification Deep Cox predictions saved in {deep_cox_class_dir}")
 
 
-    print("\n" + "=" * 100)
-    print("\nPipeline executed successfully!")
+    logger.info("\n" + "=" * 100)
+    logger.info("\nPipeline executed successfully!")
 
 if __name__ == "__main__":
     main()

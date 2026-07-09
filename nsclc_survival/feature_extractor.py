@@ -6,6 +6,8 @@ import time
 import logging
 from radiomics import featureextractor
 
+logger = logging.getLogger(__name__)
+
 class FeatureExtractor:
     """ 
     Class to extract radiomics features from preprocessed images and masks using PyRadiomics.
@@ -18,17 +20,17 @@ class FeatureExtractor:
 
         self.config_path = Path(config_path)
 
-        logger = logging.getLogger("radiomics")
-        logger.setLevel(logging.ERROR)
+        radiomics_logger = logging.getLogger("radiomics")
+        radiomics_logger.setLevel(logging.ERROR)
 
         if self.config_path.exists():
             self.extractor = featureextractor.RadiomicsFeatureExtractor(str(self.config_path))
         else:
-            print(f"[WARNING] Config file not found in {self.config_path}. Using default settings.")
+            logger.warning(f"[WARNING] Config file not found in {self.config_path}. Using default settings.")
             self.extractor = featureextractor.RadiomicsFeatureExtractor()
         
-        print("Image types enabled:", self.extractor.enabledImagetypes)
-        print("Feature classes enabled:", self.extractor.enabledFeatures)
+        logger.info(f"Image types enabled: {self.extractor.enabledImagetypes}")
+        logger.info(f"Feature classes enabled: {self.extractor.enabledFeatures}")   
 
     def extract_all_features(self, preprocessed_path):
         """
@@ -45,7 +47,7 @@ class FeatureExtractor:
         """
         preprocessed_path = Path(preprocessed_path)
         patient_folders = sorted([f for f in preprocessed_path.iterdir() if f.is_dir()])
-        print(f"Found {len(patient_folders)} patients.")
+        logger.info(f"Found {len(patient_folders)} patients.")
         
         start_total_time = time.time()    # Start total timer
         all_features = []
@@ -55,10 +57,10 @@ class FeatureExtractor:
             patient_id = p.name
 
             if not image_path.exists() or not mask_path.exists():
-                print(f"[SKIP] {patient_id}: image or mask missing")
+                logger.info(f"[SKIP] {patient_id}: image or mask missing")
                 continue
 
-            print(f"Feature extraction for {patient_id}...")
+            logger.info(f"Feature extraction for {patient_id}...")
             start_patient_time = time.time()  # Start timer for this patient
             
             try:
@@ -67,10 +69,10 @@ class FeatureExtractor:
                 
                 # Calculate duration time for this patient 
                 patient_duration = time.time() - start_patient_time
-                print(f"--> Done in {patient_duration:.2f} seconds.\n")
+                logger.info(f"--> Done in {patient_duration:.2f} seconds.\n")
 
             except Exception as e:
-                print(f"[ERROR] {patient_id}: {e}")
+                logger.error(f"[ERROR] {patient_id}: {e}")
                 continue
         
         # Calculate total duration time
@@ -79,9 +81,9 @@ class FeatureExtractor:
         minutes = int((total_duration % 3600) // 60)
         seconds = total_duration % 60
 
-        print(f"\nExtraction completed.")
-        print(f"Number of processed patients: {len(all_features)}")
-        print(f"Number of  extracted radiomics features (columns): {len(all_features[0]) - 1 if all_features else 0}")  # Subtract 1 for PatientID column
+        logger.info(f"\nExtraction completed.")
+        logger.info(f"Number of processed patients: {len(all_features)}")
+        logger.info(f"Number of  extracted radiomics features (columns): {len(all_features[0]) - 1 if all_features else 0}")  # Subtract 1 for PatientID column
 
         if hours > 0:
             time_str = f"{hours}h {minutes}m {seconds:.2f}s"
@@ -89,7 +91,7 @@ class FeatureExtractor:
             time_str = f"{minutes}m {seconds:.2f}s"
             
         avg_time = total_duration / len(all_features) if all_features else 0.00
-        print(f"Total execution time: {time_str} (Average: {avg_time:.2f}s per patient)")
+        logger.info(f"Total execution time: {time_str} (Average: {avg_time:.2f}s per patient)")
 
         return all_features
 

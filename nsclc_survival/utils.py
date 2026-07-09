@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from lifelines import KaplanMeierFitter
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def save_features_to_csv(features_list, output_path):
     """
     Converts a list of dictionaries to a Pandas DataFrame and saves it as a CSV file.
@@ -17,7 +21,7 @@ def save_features_to_csv(features_list, output_path):
     output_path = Path(output_path)
 
     if features_list is None or not features_list:
-        print("[WARNING] No features to save.")
+        logger.warning("[WARNING] No features to save.")
         return
 
     # DataFrame creation
@@ -30,8 +34,8 @@ def save_features_to_csv(features_list, output_path):
     # Saving
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
-    print(f"[INFO] File saved successfully in: {output_path}")
-    print(f"[INFO] Total columns written: {df.shape[1]} (PatientID + {df.shape[1] - 1} features)")
+    logger.info(f"[INFO] File saved successfully in: {output_path}")
+    logger.info(f"[INFO] Total columns written: {df.shape[1]} (PatientID + {df.shape[1] - 1} features)")
 
 def plot_extreme_survival_curves(survival_functions, risk_scores, output_path):
     """
@@ -43,7 +47,7 @@ def plot_extreme_survival_curves(survival_functions, risk_scores, output_path):
         risk_scores (array-like): Computed risk scores corresponding to the functions.
     """
     if survival_functions is None or len(survival_functions) == 0:
-        print("[WARNING] No survival functions to plot. Make sure 'return_survival_curves=True' was used.")
+        logger.warning("[WARNING] No survival functions to plot. Make sure 'return_survival_curves=True' was used.")
         return
     
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,27 +74,30 @@ def plot_extreme_survival_curves(survival_functions, risk_scores, output_path):
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.legend()
     plt.savefig(output_path)
-    #plt.show()
 
 def plot_deviance_residuals(df_risk_residuals, output_path):
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    """
+    Plot deviance residuals against predicted risk scores to identify diagnostic outliers.
 
-    # Se nel tuo dataframe il Risk Score non è presente, lo recuperiamo calcolandolo 
-    # o passandolo. Assumiamo che tu lo abbia unito o che sia presente. 
-    # Se hai usato il df dei residui puro, ricordati che contiene 'Cumulative_Hazard_Predicted'.
-    # Per consistenza, usiamo il logaritmo del rischio cumulativo o, se lo hai salvato, 
-    # il 'Risk_Score' (Rad-Score) dal df_risk_scores.
-  
+    The plot includes horizontal dashed lines at y = 2 and y = -2 to visually isolate 
+    pathological outliers (patients whose survival trajectory strongly deviates from 
+    model expectations).
+
+    Args:
+        df_risk_residuals (pandas.DataFrame): DataFrame containing at least the columns 
+            risk_score (predicted hazard/risk) and deviance_residual for each patient.
+        output_path (pathlib.Path): Path where the generated 
+            scatter plot image will be saved.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+     
     plt.figure(figsize=(10, 6))
-    
-    # Se passi il df dei residui puro, possiamo usare il log del Cumulative Hazard 
-    # che è matematicamente proporzionale al Risk Score lineare del modello di Cox.
-    # Se hai già una colonna 'Risk_Score', usa quella!
+      
     if 'Risk_Score' in df_risk_residuals.columns:
         x_values = df_risk_residuals['Risk_Score']
         x_label = 'Risk Score (Rad-Score)'
     else:
-        # Failsafe: usiamo il log del rischio cumulativo predetto
+        # Failsafe: use the log of the predicted cumulative hazard
         x_values = np.log(df_risk_residuals['Cumulative_Hazard_Predicted'])
         x_label = 'Log(Predicted Cumulative Hazard)'
 
@@ -100,14 +107,13 @@ def plot_deviance_residuals(df_risk_residuals, output_path):
     is_event = (status == True)
     is_censored = (status == False)
   
-    #Definiamo i colori in base allo stato dell'evento (0 = Censurato, 1 = Evento)
-    #Rende il grafico molto più informativo dal punto di vista clinico!  
+    #Define colors based on the state of the event (0 = Censored, 1 = Event)  
     status_labels = df_risk_residuals['Event_Status'].map({
         True: 'Event (Deceased)', 
         False: 'Censored (Alive)'
     })
 
-    # 3. Disegno dei punti dei Censurati (BLU)
+    # Plotting the points for Censored patients (BLUE)
     plt.scatter(
         x=x_values[is_censored],
         y=y_values[is_censored],
@@ -115,10 +121,10 @@ def plot_deviance_residuals(df_risk_residuals, output_path):
         alpha=0.8,
         edgecolors='w',
         s=70,
-        label='Censored (Alive)' # L'etichetta è legata direttamente al colore!
+        label='Censored (Alive)' # The label is directly linked to the color!
     )
 
-    # 4. Disegno dei punti degli Eventi (ROSSO)
+    # Plotting the points for Event patients (RED)
     plt.scatter(
         x=x_values[is_event],
         y=y_values[is_event],
@@ -126,41 +132,42 @@ def plot_deviance_residuals(df_risk_residuals, output_path):
         alpha=0.8,
         edgecolors='w',
         s=70,
-        label='Event (Deceased)' # L'etichetta è legata direttamente al colore!
+        label='Event (Deceased)' 
     )
    
-    # Linea di riferimento sullo zero (modello ideale)
+    # Reference line on the zero (ideal model)
     plt.axhline(y=0, color='black', linestyle='-', linewidth=1.2)
     
-    # Linee di soglia critica per gli outlier statistici (+2 e -2)
-    plt.axhline(y=2, color='gray', linestyle='--', linewidth=1, label='Outlier Threshold ($\pm$2)')
+    # Critical threshold lines for statistical outliers (+2 and -2)
+    plt.axhline(y=2, color='gray', linestyle='--', linewidth=1, label=r'Outlier Threshold ($\pm$2)')
     plt.axhline(y=-2, color='gray', linestyle='--')
     
-    # Formattazione grafica
+    # Graphical formatting
     plt.title('Model Diagnostics: Risk Score vs Deviance Residuals', fontsize=14, fontweight='bold', pad=15)
     plt.xlabel(x_label, fontsize=12)
     plt.ylabel('Deviance Residuals', fontsize=12)
-    plt.grid(True, linestyle='--', alpha=0.5)
-    
-    # Sistemazione della legenda
+    plt.grid(True, linestyle='--', alpha=0.5)    
     plt.legend(title='Patient Status', loc='best')
-    
-    # Ottimizzazione spazi e salvataggio
     plt.tight_layout()
     
     if output_path:
         plt.savefig(output_path, dpi=300)
-        print(f"[INFO] Residuals diagnostic plot saved to: {output_path}")
+        logger.info(f"[INFO] Residuals diagnostic plot saved to: {output_path}")
 
-def kaplan_meier_plot(y_test, pred_classes, logrank_p_value, output_path, title_suffix="DeepCox"):
-    """_summary_
+def kaplan_meier_plot(y_test, pred_classes, logrank_p_value, output_path, title_suffix):
+    """
+    Plot Kaplan-Meier survival curves for two risk groups based on predicted classes.
 
     Args:
-        y_test (_type_): _description_
-        pred_classes (_type_): _description_
-        logrank_p_value (_type_): _description_
-        output_path (_type_): _description_
-        title_suffix (str, optional): _description_. Defaults to "DeepCox".
+        y_test (numpy.ndarray): Structured array containing binary event indicators 
+            and survival times.
+        pred_classes (numpy.ndarray): Binary array of predicted risk groups 
+            (0 for Low Risk, 1 for High Risk) used to stratify patients.
+        logrank_p_value (float): The p-value calculated from the Log-Rank test 
+            to display directly on the plot.
+        output_path (pathlib.Path): Path where the generated plot image will be saved.
+        title_suffix (str): String suffix to append to the plot title and filename 
+            to distinguish between models (e.g., 'Cox' or 'DeepCox').
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -193,7 +200,6 @@ def kaplan_meier_plot(y_test, pred_classes, logrank_p_value, output_path, title_
     plt.legend(loc="best")
     
     plt.savefig(output_path)
-    #plt.show()
 
 def plot_loss_funct(loss_history, output_path):
     """

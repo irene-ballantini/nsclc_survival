@@ -17,10 +17,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from lifelines import KaplanMeierFitter
 from lifelines.statistics import logrank_test
 from sklearn.metrics import classification_report, confusion_matrix
-import matplotlib.pyplot as plt
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # 1. DATA LOADING AND PROCESSING
@@ -88,8 +90,8 @@ class RadiomicsClinicalDataProcessor:
         df_radiomics = pd.read_csv(self.radiomics_path)
         df_clinical = pd.read_csv(self.clinical_path)
         self.df_total = pd.merge(df_radiomics, df_clinical, on=patientID)
-        print(f"Data merging completed. Total rows: {self.df_total.shape[0]}")
-        print(f"Unique patients: {self.df_total[patientID].nunique()}")    # there could be duplicates if there are multiple records per patient
+        logger.info(f"Data merging completed. Total rows: {self.df_total.shape[0]}")
+        logger.info(f"Unique patients: {self.df_total[patientID].nunique()}")    # there could be duplicates if there are multiple records per patient
         
         # 1. Stage mapping
         if stage in self.df_total.columns:
@@ -159,7 +161,7 @@ class RadiomicsClinicalDataProcessor:
         
         if not has_duplicates:
             # CASE A: No duplicates -> Priority to stratification to ensure balanced representation of outcomes in train and test sets
-            print("INFO: No duplicates found. Applying stratified split")
+            logger.info("INFO: No duplicates found. Applying stratified split")
 
             try:
                 # Stratification based on both Event Status and Survival Time 
@@ -176,7 +178,7 @@ class RadiomicsClinicalDataProcessor:
                 )
 
             except ValueError:
-                print("INFO: Dataset too small. Stratification based on Event Status only.")
+                logger.warning("WARNING: Dataset too small. Stratification based on Event Status only.")
                 X_train_raw, X_test_raw, self.y_train, self.y_test = train_test_split(
                     X, y, train_size=train_size, random_state=random_seed, stratify=self.df_total[event_status_col]
                 )  
@@ -186,7 +188,7 @@ class RadiomicsClinicalDataProcessor:
 
         else:
             # CASE B: duplicates present -> Maximum priority to avoid DATA LEAKAGE (Groups)
-            print("WARNING: Duplicates found for patients. Priority given to Group Management (No Data Leakage).")
+            logger.warning("WARNING: Duplicates found for patients. Priority given to Group Management (No Data Leakage).")
             gss = GroupShuffleSplit(n_splits=1, train_size=train_size, random_state=random_seed)
             train_idx, test_idx = next(gss.split(X, y, groups=self.df_total[patientID]))
             
@@ -208,7 +210,7 @@ class RadiomicsClinicalDataProcessor:
         # Save feature names for later use
         self.feature_names = X.columns.tolist()
         
-        print(f"Split completed. Train size: {self.X_train.shape[0]}, Test size: {self.X_test.shape[0]}")
+        logger.info(f"Split completed. Train size: {self.X_train.shape[0]}, Test size: {self.X_test.shape[0]}")
         return X, y, self.X_train, self.X_test, self.y_train, self.y_test
     
 # ==========================================
@@ -280,7 +282,7 @@ class LassoCoxModel:
                 between 10^-1.0 and 10^-0.1 with 20 values is automatically generated. 
                 Defaults to None.
         """
-        print("Starting optimized research through GridSearchCV...")
+        logger.info("Starting optimized research through GridSearchCV...")
         
         # Use Lasso
         l1_ratio_chosen = 1.0
@@ -316,7 +318,7 @@ class LassoCoxModel:
         # Outer Loop for model validation
         cv_strategy_out = RepeatedKFold(n_splits=cv, n_repeats=n_repeats, random_state=100)
 
-        print("\nExecution of the Nested Cross-Validation (Repeated) on Raw Data...")
+        logger.info("\nExecution of the Nested Cross-Validation (Repeated) on Raw Data...")
     
         # Create a pipeline: data are imputed and scaled FOLD BY FOLD in automatically
         nested_pipeline = Pipeline([
@@ -353,9 +355,9 @@ class LassoCoxModel:
 
         nested_c_index_media = np.mean(nested_results['test_score'])   # 'test_score' is a key of the dictionary generated
         nested_c_index_std = np.std(nested_results['test_score'])
-        print(f"--> NESTED CV COMPLETE: {nested_c_index_media:.4f} ± {nested_c_index_std:.4f}\n")
+        logger.info(f"--> NESTED CV COMPLETE: {nested_c_index_media:.4f} ± {nested_c_index_std:.4f}\n")
         
-        print("Extraction of the optimal alpha...")
+        logger.info("Extraction of the optimal alpha...")
         # Use GridSearchCV 
         gcv = GridSearchCV(
             estimator=base_estimator,
@@ -376,8 +378,8 @@ class LassoCoxModel:
         cv_results = gcv.cv_results_
         std_best_score = cv_results['std_test_score'][best_index]    # local test fold result of CV
         
-        print(f"Optimization completed. Best Alpha: {self.best_alpha:.6f}" )
-        print(f"(Mean Validation C-index on the Training Set: {mean_best_score:.4f} \u00B1 {std_best_score:.4f})")
+        logger.info(f"Optimization completed. Best Alpha: {self.best_alpha:.6f}" )
+        logger.info(f"(Mean Validation C-index on the Training Set: {mean_best_score:.4f} \u00B1 {std_best_score:.4f})")
         
         # Train the final model
         self.model = CoxnetSurvivalAnalysis(
@@ -412,7 +414,7 @@ class LassoCoxModel:
         if self.model is None:
             raise ValueError("The model must be trained first with fit_crossval()")
         c_index = self.model.score(X_test, y_test)
-        print(f"LASSO-Cox C-index on Test Set: {c_index:.4f}")
+        logger.info(f"LASSO-Cox C-index on Test Set: {c_index:.4f}")
         return c_index
 
     def get_selected_features(self, feature_names):
@@ -456,7 +458,7 @@ class LassoCoxModel:
         df_selected = df_selected.sort_values(by='Abs_Coefficient', ascending=False).drop(columns=['Abs_Coefficient'])
 
         selected_names = df_selected['Feature'].tolist()
-        print(f"Feature selected ({len(selected_names)} out of {len(feature_names)}): {selected_names}")
+        logger.info(f"Feature selected ({len(selected_names)} out of {len(feature_names)}): {selected_names}")
         
         return df_selected
     
@@ -588,7 +590,7 @@ class LassoCoxModel:
         event_observed = y_input['Event_Status'] == True
         
         if not np.any(event_observed):
-            print("[!] Time Error: No observed events found in the Test Set. Cannot compute MAE/RMSE.")
+            logger.warning("[!] Time Error: No observed events found in the Test Set. Cannot compute MAE/RMSE.")
             return None
 
         # Extract the filtered data 
@@ -618,9 +620,9 @@ class LassoCoxModel:
         mae_months = mean_absolute_error(actual_months, pred_months)
         rmse_months = root_mean_squared_error(actual_months, pred_months)
     
-        print(f"\nSurvival Time Error Analysis (N. patients with event = {len(pred_days)}):")
-        print(f"    - Mean Absolute Error (MAE):   {mae_days:.2f} days | {mae_months:.2f} months")
-        print(f"    - Root Mean Squared Error (RMSE): {rmse_days:.2f} days | {rmse_months:.2f} months")
+        logger.info(f"\nSurvival Time Error Analysis (N. patients with event = {len(pred_days)}):")
+        logger.info(f"    - Mean Absolute Error (MAE):   {mae_days:.2f} days | {mae_months:.2f} months")
+        logger.info(f"    - Root Mean Squared Error (RMSE): {rmse_days:.2f} days | {rmse_months:.2f} months")
         
         # Build the DataFrame
         df_residuals = pd.DataFrame({
@@ -683,11 +685,11 @@ class LassoCoxModel:
             estimate=predictions_matrix, 
             times=times_grid
         )
-        print(f"Integrated Brier Score (IBS) on Test Set: {ibs_score:.4f}")
+        logger.info(f"Integrated Brier Score (IBS) on Test Set: {ibs_score:.4f}")
         if ibs_score < 0.25:
-            print("    -> The model estimates the risk over time better than a random model (0.25).")
+            logger.info("    -> The model estimates the risk over time better than a random model (0.25).")
         else:
-            print("    -> WARNING: High probabilistic error (equal to or worse than a random model).")
+            logger.warning("    -> WARNING: High probabilistic error (equal to or worse than a random model).")
          
         return ibs_score
     
@@ -1013,10 +1015,10 @@ class DeepCoxModel:
             self.loss_history.append(avg_epoch_loss)
                 
             if verbose and (epoch + 1) % 10 == 0:
-                print(f"Epoch {epoch+1}/{epochs} - Loss: {avg_epoch_loss:.4f}")
+                logger.info(f"Epoch {epoch+1}/{epochs} - Loss: {avg_epoch_loss:.4f}")
 
         if verbose:
-            print("[INFO] Training complete. Computing Breslow baseline hazard...")
+            logger.info("[INFO] Training complete. Computing Breslow baseline hazard...")
         self.compute_baseline_hazard(X_train, y_train, X_tensor=X_tensor)
 
     def compute_baseline_hazard(self, X_train, y_train, X_tensor=None):
@@ -1118,7 +1120,7 @@ class DeepCoxModel:
         
         # A major risk corrsponds to a shorter survival time in sksurv
         c_index = concordance_index_censored(event_status, survival_time, risk_scores)[0]
-        print(f"Deep-Cox C-index on Test Set: {c_index:.4f}")
+        logger.info(f"Deep-Cox C-index on Test Set: {c_index:.4f}")
         return c_index
     
     def predict_survival_time(self, X_test, risk_scores=None, hazards=None):
@@ -1202,7 +1204,7 @@ class DeepCoxModel:
         event_observed = y_input['Event_Status'] == True
         
         if not np.any(event_observed):
-            print("[!] Time Error: No observed events found in the Test Set. Cannot compute MAE/RMSE.")
+            logger.warning("[!] Time Error: No observed events found in the Test Set. Cannot compute MAE/RMSE.")
             return None
 
         # Extract the filtered data.
@@ -1230,11 +1232,11 @@ class DeepCoxModel:
         mae_months = mean_absolute_error(actual_months, pred_months)
         rmse_months = root_mean_squared_error(actual_months, pred_months)
     
-        print(f"Survival Time Error Analysis (N. patients with event = {len(pred_days)}):")
-        print(f"    - Mean Absolute Error (MAE):   {mae_days:.2f} days | {mae_months:.2f} months")
-        print(f"    - Root Mean Squared Error (RMSE): {rmse_days:.2f} days | {rmse_months:.2f} months")
+        logger.info(f"Survival Time Error Analysis (N. patients with event = {len(pred_days)}):")
+        logger.info(f"    - Mean Absolute Error (MAE):   {mae_days:.2f} days | {mae_months:.2f} months")
+        logger.info(f"    - Root Mean Squared Error (RMSE): {rmse_days:.2f} days | {rmse_months:.2f} months")
         
-        # Build the Datafram
+        # Build the Dataframe
         df_residuals = pd.DataFrame({
             patientID: patient_ids_arr,
             'Risk_Score': risk_scores_filtered,
@@ -1298,11 +1300,11 @@ class DeepCoxModel:
             estimate=predictions_matrix, 
             times=times_grid
         )
-        print(f"Integrated Brier Score (IBS) on Test Set: {ibs_score:.4f}")
+        logger.info(f"Integrated Brier Score (IBS) on Test Set: {ibs_score:.4f}")
         if ibs_score < 0.25:
-            print("    -> The model estimates the risk over time better than a random model (0.25).")
+            logger.info("    -> The model estimates the risk over time better than a random model (0.25).")
         else:
-            print("    -> WARNING: High probabilistic error (equal to or worse than a random model).")
+            logger.warning("    -> WARNING: High probabilistic error (equal to or worse than a random model).")
     
         return ibs_score
     
@@ -1424,7 +1426,7 @@ class SurvivalRiskClassifier:
         self.threshold_ = np.median(risk_scores_train)
         
         if verbose:
-            print(f"[INFO] Optimal risk threshold (Median Train): {self.threshold_:.4f}")
+            logger.info(f"[INFO] Optimal risk threshold (Median Train): {self.threshold_:.4f}")
         return self
     
     def predict_risk_class(self, X_input=None, risk_scores=None):
@@ -1479,17 +1481,17 @@ class SurvivalRiskClassifier:
             event_observed_A=events_test[idx_low], event_observed_B=events_test[idx_high]
         )
 
-        print(f"Stratification results {title_suffix}:")
-        print(f"  - Low Risk patients: {np.sum(idx_low)}")
-        print(f"  - High Risk patients: {np.sum(idx_high)}")
-        print(f"  - Log-Rank p-value: {logrank_res.p_value:.6f}")
+        logger.info(f"Stratification results {title_suffix}:")
+        logger.info(f"  - Low Risk patients: {np.sum(idx_low)}")
+        logger.info(f"  - High Risk patients: {np.sum(idx_high)}")
+        logger.info(f"  - Log-Rank p-value: {logrank_res.p_value:.6f}")
         
         if logrank_res.p_value < 0.05:
-            print(f"  -> The classification separated the patients in a statistically significant way (p < 0.05).\n")
+            logger.info(f"  -> The classification separated the patients in a statistically significant way (p < 0.05).\n")
         elif 0.05 <= logrank_res.p_value <= 0.10:
-            print(f"  -> Borderline Significance: dataset might be too small for a 95% confidence level, but a strong trend is observed.\n")  
+            logger.info(f"  -> Borderline Significance: dataset might be too small for a 95% confidence level, but a strong trend is observed.\n")  
         else:
-            print(f"  -> WARNING: The separation is not statistically significant (p >= 0.05).\n")
+            logger.warning(f"  -> WARNING: The separation is not statistically significant (p >= 0.05).\n")
 
         return logrank_res.p_value
     
@@ -1519,13 +1521,13 @@ class SurvivalRiskClassifier:
         median_time_train = np.median(y_train['Survival_Time'])
         y_true_class = (times_test_events < median_time_train).astype(int)
         
-        print("\nClassification Report (only patients with observed event):")
-        print(classification_report(y_true_class, y_pred_filtered, target_names=['Low Risk', 'High Risk']))
+        logger.info("\nClassification Report (only patients with observed event):")
+        logger.info(classification_report(y_true_class, y_pred_filtered, target_names=['Low Risk', 'High Risk']))
         
         conf_matrix = confusion_matrix(y_true_class, y_pred_filtered)
 
-        print("\nConfusion Matrix:")
-        print(conf_matrix)
+        logger.info("\nConfusion Matrix:")
+        logger.info(conf_matrix)
 
         return conf_matrix
      

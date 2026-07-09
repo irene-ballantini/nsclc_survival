@@ -6,6 +6,10 @@ import SimpleITK as sitk
 from pathlib import Path
 from rt_utils import RTStructBuilder
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class RadiomicsPreprocessor: 
     """
     Preprocessor for converting clinical data to NIfTI format (.nii.gz):
@@ -24,7 +28,7 @@ class RadiomicsPreprocessor:
         Process all the patients calling the method process_patient().
         """
         patient_folders = sorted([f for f in self.organized_path.iterdir() if f.is_dir()])
-        print(f"Found {len(patient_folders)} patients.")
+        logger.info(f"Found {len(patient_folders)} patients.")
 
         processed_successfully = []
 
@@ -34,24 +38,24 @@ class RadiomicsPreprocessor:
             # Check if file already exists to avoid re-processing
             output_check = self.preprocessed_path / patient_id / "label.nii.gz"
             if output_check.exists():
-                print(f"\n[{i}/{len(patient_folders)}] Skipping {patient_id}: Already processed.")
+                logger.info(f"\n[{i}/{len(patient_folders)}] Skipping {patient_id}: Already processed.")
                 continue
 
-            print(f"\nProcessing folder {i}/{len(patient_folders)}: Patient {patient_id}")
+            logger.info(f"\nProcessing folder {i}/{len(patient_folders)}: Patient {patient_id}")
             result = self.process_patient(patient_dir, patient_id)
 
             if result:
-                print(f"--- SUCCESS: {patient_id} saved correctly.")
+                logger.info(f"--- SUCCESS: {patient_id} saved correctly.")
                 processed_successfully.append(result)
             else:
-                print(f"--- FAILED: {patient_id} was skipped.")
+                logger.warning(f"--- FAILED: {patient_id} was skipped.")
 
         if len(processed_successfully) != 0:
-            print(f"\nPre-processing completed! {len(processed_successfully)}/{len(patient_folders)} patients processed.")
+            logger.info(f"\nPre-processing completed! {len(processed_successfully)}/{len(patient_folders)} patients processed.")
         else:
-            print("\nPatients were already processed or skipped due to errors. No new files created.")
+            logger.info("\nPatients were already processed or skipped due to errors. No new files created.")
 
-        print(f"The NIfTI files are in: {self.preprocessed_path}")
+        logger.info(f"The NIfTI files are in: {self.preprocessed_path}")
     
     def process_patient(self, patient_dir, patient_id, roi_target="GTV-1"): 
 
@@ -74,14 +78,14 @@ class RadiomicsPreprocessor:
         rt_files = list((patient_dir / "RTSTRUCT").glob("*.dcm")) 
 
         if not rt_files:
-            print(f"Skipping {patient_id}: No file RTSTRUCT found.")
+            logger.info(f"Skipping {patient_id}: No file RTSTRUCT found.")
             return None
         
         # Take the first RTSTRUCT file found
         path_rtstruct = rt_files[0]  
 
-        print(f"CT Path: {path_ct}")
-        print(f"RT Path: {path_rtstruct}")
+        logger.info(f"CT Path: {path_ct}")
+        logger.info(f"RT Path: {path_rtstruct}")
 
         try:
             # Load the RTSTRUCT 
@@ -91,14 +95,14 @@ class RadiomicsPreprocessor:
             )
 
             rois = rtstruct.get_roi_names()
-            print(f"ROI found for this patient {patient_id}: {rois}")
+            logger.info(f"ROI found for this patient {patient_id}: {rois}")
 
             if not rois:
-                print("WARNING: No ROI loaded correctly.")
+                logger.warning("WARNING: No ROI loaded correctly.")
                 return None
 
             if roi_target not in rois:
-                print(f"Skipping {patient_id}: ROI '{roi_target}' not found. Available ROIs: {rois}")
+                logger.info(f"Skipping {patient_id}: ROI '{roi_target}' not found. Available ROIs: {rois}")
                 return None
         
             # Extract the tumor mask 
@@ -106,7 +110,7 @@ class RadiomicsPreprocessor:
             mask_shape = tumor_mask.shape
 
             # Verify the dimensions of the mask
-            print(f"Shape of the mask: {tumor_mask.shape}") 
+            logger.info(f"Shape of the mask: {tumor_mask.shape}") 
             # Should be (height, width, number_of_slices)
         
             # Load the CT series as a SimpleITK image
@@ -129,7 +133,7 @@ class RadiomicsPreprocessor:
             tumor_mask_itk = self._numpy_to_itk(tumor_mask, ct_image)
 
             # 2. Resample CT to isotropic spacing (e.g., 1mm x 1mm x 1mm)
-            print(f"Resampling {patient_id} to 1.0mm isotropic...")
+            logger.info(f"Resampling {patient_id} to 1.0mm isotropic...")
             ct_resampled = self._resample_image(ct_image, is_label=False)
 
             # Resample the tumor mask using the ct_resampled
@@ -148,7 +152,7 @@ class RadiomicsPreprocessor:
             raise e
 
         except Exception as e:
-            print(f"Skipping patient {patient_id} due to RTSTRUCT error: {e}")
+            logger.error(f"Skipping patient {patient_id} due to RTSTRUCT error: {e}")
             return None
     
     def _numpy_to_itk(self, mask_np, reference_image):

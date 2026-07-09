@@ -9,6 +9,10 @@ Module for downloading NSCLC-Radiomics dataset from TCIA.
 from tcia_utils import nbia
 from nsclc_survival.settings import RAW_DATA_PATH, COLLECTION_NAME, N_PATIENTS, patientID, modality, CT, RTSTRUCT
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def download_nsclc_radiomics_data(n_patients_to_download=N_PATIENTS):
     """
     This function connects to the TCIA API, retrieves metadata for the NSCLC-Radiomics collection, 
@@ -30,11 +34,8 @@ def download_nsclc_radiomics_data(n_patients_to_download=N_PATIENTS):
     RAW_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
     # 1. Metadata retrieval
-    print("Connecting to TCIA... Retrieving series list.")
+    logger.info("Connecting to TCIA... Retrieving series list.")
     df = nbia.getSeries(collection=COLLECTION_NAME, format="df")
-
-    #print(df.columns)
-    #print(df.info())
 
     # 2. Filtering logic: we are looking for patients with CT + RTSTRUCT
     patients_ct = set(df[df[modality] == CT][patientID])
@@ -44,12 +45,12 @@ def download_nsclc_radiomics_data(n_patients_to_download=N_PATIENTS):
     if len(valid_patients) == 0:
         raise ValueError(f"Error: No patients found with both {CT} and {RTSTRUCT} in '{COLLECTION_NAME}'.")
 
-    print(f"Found {len(valid_patients)} complete patients.")
+    logger.info(f"Found {len(valid_patients)} complete patients.")
 
     # 3. Select a subset (e.g. 100)
     if len(valid_patients) < n_patients_to_download:
         # If n_patients_to_download is greater than the available patients
-        print(f"Warning: Requested {n_patients_to_download} patients, but only {len(valid_patients)} are available.")
+        logger.warning(f"Warning: Requested {n_patients_to_download} patients, but only {len(valid_patients)} are available.")
         actual_download_count = len(valid_patients)
     else:
         actual_download_count = n_patients_to_download
@@ -59,7 +60,7 @@ def download_nsclc_radiomics_data(n_patients_to_download=N_PATIENTS):
 
     series_dict_list = df_to_download.to_dict(orient='records')
 
-    print(f"Starting download for {actual_download_count} patients in {RAW_DATA_PATH}...")
+    logger.info(f"Starting download for {actual_download_count} patients in {RAW_DATA_PATH}...")
     nbia.downloadSeries(series_dict_list, path=RAW_DATA_PATH)
-    print("Download completed successfully!")
+    logger.info("Download completed successfully!")
 
