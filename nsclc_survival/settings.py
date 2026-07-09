@@ -14,7 +14,7 @@ PLOT_PATH = DATA_DIR / "plots"
 
 CONFIG_PATH = BASE_DIR / "configs"
 
-CLINICAL_FEATURES_PATH = BASE_DIR / "examples"
+CLINICAL_FEATURES_PATH = BASE_DIR / "examples" / "data"
 # ---------------------------------------------------------
 
 # --- Config Paths ---
