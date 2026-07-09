@@ -1,0 +1,15 @@
+Feature,Coefficient,Hazard_Ratio
+Histology_squamous cell carcinoma,0.3556,1.4271
+Histology_large cell,0.3051,1.3567
+Histology_nos,0.2553,1.2908
+Histology_adenocarcinoma,0.2441,1.2764
+Overall.Stage,-0.1892,0.8276
+log-sigma-3-0-mm-3D_gldm_SmallDependenceLowGrayLevelEmphasis,-0.1680,0.8453
+original_shape_MinorAxisLength,0.1275,1.1360
+gender,0.1144,1.1212
+wavelet-LHL_glcm_Correlation,-0.0745,0.9282
+log-sigma-3-0-mm-3D_glrlm_ShortRunLowGrayLevelEmphasis,-0.0471,0.9540
+squareroot_ngtdm_Strength,-0.0330,0.9676
+logarithm_ngtdm_Busyness,0.0321,1.0327
+logarithm_glszm_SizeZoneNonUniformityNormalized,-0.0191,0.9811
+wavelet-LHL_glszm_GrayLevelNonUniformity,0.0048,1.0048
