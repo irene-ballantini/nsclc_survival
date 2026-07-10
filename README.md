@@ -111,8 +111,10 @@ $$
 where 
 
 $$
-\text{BS}(t) = \frac{1}{n} \sum^n_{i=1}\big(\textbf{Y}_i-\hat S_i(t)\big)^2.
+\text{BS}(t) = \frac{1}{n} \sum^n_{i=1}\big(\textbf{Y}_i- S_i(t)\big)^2.
 $$
+
+which corresponds to the squared distance between the survival probability computed by the model and the real status of the patient (1 = patient alive, 0 = patient dead) 
 
 Specifically, its interpretation is bounded by the following benchmarks:
    * $\text{IBS}=0$; the model is perfect, capable of predicting the exact event status with absolute certainty across all time steps;
@@ -188,8 +190,15 @@ If you use venv, you can safely create the environment folder inside the project
 3. Install the dependencies
    ```
    pip install numpy
-   pip install --editable . --no-build-isolation
+   pip install -r requirements.txt
+   pip install --editable . 
    ```
+> [!NOTE]
+> **WINDOWS USERS: WinError 206 (Filename too long)**
+> 
+> Windows users might encounter a `WinError 206` (Filename or extension too long) when running `pip install -r requirements.txt`. This happens because deep dependency trees (like PyTorch) can exceed Windows' default 260-character path limit.
+> 
+> **Solution:** Simply run `pip install -r requirements.txt` a second time. The second attempt will successfully bypass the path limit by leveraging the partially cached installation from the first run.
 
 ## Usage
 Once the installation is complete, you can run the NSCLC Survival Analysis pipeline directly from your terminal. 
@@ -232,15 +241,27 @@ options:
   --skip-download       Skip the download and organization of DICOM data (use local data if present)
   --skip-extraction     Skip the preprocessing and extraction of radiomic features
 ```
-To see how `--skip-download` and `--skip-extraction` influence the pipeline workflow go to the [Pipeline Behavior Matrix](#pipeline-behavior-matrix) section. Instead execution examples and Use Cases of the Command Line are listed below the [Execution Examples and Use Cases](#-execution-examples-and-use-cases) section.
+To see how `--skip-download` and `--skip-extraction` influence the pipeline workflow go to the [Pipeline Behavior Matrix](#pipeline-behavior-matrix) section. Instead execution examples and Use Cases of the Command Line are listed below the [Execution Examples and Use Cases](#bulb-execution-examples-and-use-cases) section.
 
-### Quick Example of Use
+### Quick Example of Use (No Modelling Included)
 
 Since the default number of patients to download is set to 100, you can quickly test the pipeline's operation on a smaller cohort by running:
 ```
 nsclc_survival --n-patients 15
 ```
-**Note**: While 15 patients are far too few to yield statistically significant survival models, running this smaller setup allows you to quickly verify that all parts of the pipeline function correctly. Data downloading, preprocessing, and radiomic feature extraction are highly time-consuming phases; starting with a minimal cohort will save you a considerable amount of time during your initial setup.
+> [!CAUTION]
+> While **15** patients are enough to test the data download, preprocessing, and radiomic feature extraction phases, this minimal cohort is generally **insufficient for the modelling phase**. Depending on the random split, the pipeline will safely interrupt the execution after feature extraction due to one of the following built-in security checks:
+> 
+> * **Stratification Failure (ValueError):** If the 15 selected patients do not contain enough events or non-events to perform a stratified split, `scikit-learn` will stop the execution and the following message will appear:
+>   ```text
+>   CRITICAL ERROR DURING DATA SPLITTING: The least populated class in y has only 1 member, which is too few...
+>   Please increase the number of patients (e.g., --n-patients 40) to ensure a stable statistical split.
+>   ```
+> * **Insufficient Training Data Size:** Even if the split succeeds, if the resulting Train Set contains fewer than 15 patients, the pipeline will halt to prevent mathematical crashes and non-convergence during Cross-Validation or Deep Learning training.
+>
+> To successfully run the **entire pipeline** (including Lasso-Cox, Deep Cox, and risk classification reports), it is highly recommended to use at least **40 patients** (`--n-patients 40`); this number depends on the composition of the dataset.
+
+**Note**: Running this smaller setup with 15 patients allows you to quickly verify that all structural components of the pipeline function correctly. Data downloading, preprocessing, and radiomic feature extraction are highly time-consuming phases; starting with a minimal cohort will save a considerable amount of time during your initial setup and evaluation.
 
 ## Testing
 
@@ -259,11 +280,11 @@ Description of the folders related to the `Python` version.
 
 | **Directory**                                                                                | **Description**                                                                                       |
 |:---------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------|
-|[examples](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples)             | Contains a ready-to-run pipeline script ([run_pipeline_example.py]()),examples of CSV files containing the clinical features to merge with the extracted radiomics features (in [data_config](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples/data_config) folder), and pre-calculated reference outputs (in [reference_outputs]()) for benchmarking.|
+|[examples](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples)             | Contains a ready-to-run pipeline script ([run_pipeline_example.py](https://github.com/irene-ballantini/nsclc_survival/blob/main/examples/run_pipeline_example.py)), examples of CSV files containing the clinical features to merge with the extracted radiomics features (in [data_config](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples/data_config) folder), and pre-calculated reference outputs (in [reference_outputs](https://github.com/irene-ballantini/nsclc_survival/tree/main/examples/reference_outputs)) for benchmarking.|
 |[configs](https://github.com/irene-ballantini/nsclc_survival/tree/main/configs)               | Configuration files (YAML) specifying settings and filters for `pyradiomics` feature extraction.                                             |
 |[nsclc_survival](https://github.com/irene-ballantini/nsclc_survival/tree/main/nsclc_survival) | List of `Python` scripts for the `nsclc_survival` pipeline.                                           | 
 
-Below there's an overview of the project's directory tree created once the package is ran.
+Below there's an overview of the project's directory tree created once the package is run.
 
 ```text
 nsclc_survival

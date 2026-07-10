@@ -35,7 +35,7 @@ def main():
     # (e.g., by setting DATA_DIR = BASE_DIR / "data_new").
 
     # To do a fast test, you can uncomment the line below.
-    # settings.N_PATIENTS = 20      # not smaller than 15
+    # settings.N_PATIENTS = 20      # the train set cannot be smaller than 15 if you want to run the models
 
     # --- Automatic cache reset if mismatch is detected ---
     if settings.ORGANIZED_DATA_PATH.exists():
