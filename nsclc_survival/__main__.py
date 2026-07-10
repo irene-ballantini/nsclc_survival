@@ -481,76 +481,91 @@ def main ():
     logger.info(" RISK CLASSIFICATION - LASSO-COX MODEL".center(100, " "))
     logger.info("=" * 100)
 
-    classifier_cox = SurvivalRiskClassifier(trained_model=lasso_cox)
-    classifier_cox.fit_threshold(X_train)
-    y_pred_cox_classes = classifier_cox.predict_risk_class(risk_scores=risk_scores)
-    p_value_cox = classifier_cox.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_cox_classes, title_suffix="Lasso-Cox")
-    
-    utils.kaplan_meier_plot(
-    y_test=y_test,
-    pred_classes=y_pred_cox_classes,
-    logrank_p_value=p_value_cox,
-    title_suffix="Cox",
-    output_path=settings.PLOT_PATH / "KM_popolazione_cox.png"
-)
-
-    logger.info("--- CLASSIFICATION REPORT COX---")
-    matrix = classifier_cox.compute_classification_report(
-    y_test=y_test, 
-    y_train=y_train, 
-    y_pred_class=y_pred_cox_classes
-    )
-    
-    logger.info("--- PREDICTION REPORT COX ---")
-    df_patients_class_cox = classifier_cox.generate_prediction_report(
-        patient_ids=data_processor.patient_ids_test, 
-        y_test=y_test, 
-        predicted_time=pred_days,
-        y_pred_class=y_pred_cox_classes,
-        risk_scores_test=risk_scores
+    if risk_scores is not None and pred_days is not None:
+        try:
+            classifier_cox = SurvivalRiskClassifier(trained_model=lasso_cox)
+            classifier_cox.fit_threshold(X_train)
+            y_pred_cox_classes = classifier_cox.predict_risk_class(risk_scores=risk_scores)
+            p_value_cox = classifier_cox.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_cox_classes, title_suffix="Lasso-Cox")
+            
+            utils.kaplan_meier_plot(
+            y_test=y_test,
+            pred_classes=y_pred_cox_classes,
+            logrank_p_value=p_value_cox,
+            title_suffix="Cox",
+            output_path=settings.PLOT_PATH / "KM_popolazione_cox.png"
         )
-    
-    cox_class_dir = output_directory / "classes_cox.csv"
-    df_patients_class_cox.to_csv(cox_class_dir, index=False, float_format="%.4f")
-    logger.info(f"Classification Cox predictions saved in {cox_class_dir}")
+
+            logger.info("--- CLASSIFICATION REPORT COX---")
+            matrix = classifier_cox.compute_classification_report(
+            y_test=y_test, 
+            y_train=y_train, 
+            y_pred_class=y_pred_cox_classes
+            )
+            
+            logger.info("--- PREDICTION REPORT COX ---")
+            df_patients_class_cox = classifier_cox.generate_prediction_report(
+                patient_ids=data_processor.patient_ids_test, 
+                y_test=y_test, 
+                predicted_time=pred_days,
+                y_pred_class=y_pred_cox_classes,
+                risk_scores_test=risk_scores
+                )
+            
+            cox_class_dir = output_directory / "classes_cox.csv"
+            df_patients_class_cox.to_csv(cox_class_dir, index=False, float_format="%.4f")
+            logger.info(f"Classification Cox predictions saved in {cox_class_dir}")
+
+        except ValueError as e:
+            logger.warning(f"[SKIPPED] Lasso-Cox Risk Stratification failed: {e}")
+            logger.warning("One of the risk groups might be empty in the test set. Kaplan-Meier plot skipped.")
+    else:
+        logger.warning("[SKIPPED] Lasso-Cox Risk Classification omitted because the base model training failed.")
 
     logger.info("\n" + "=" * 100)
     logger.info(" RISK CLASSIFICATION - DEEP COX MODEL".center(100, " "))
     logger.info("=" * 100)
 
-    classifier_deep = SurvivalRiskClassifier(trained_model=deep_cox)
-    classifier_deep.fit_threshold(X_train)
-    y_pred_deep_classes = classifier_deep.predict_risk_class(risk_scores=deep_risk_scores)
-    p_value_deep = classifier_deep.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_deep_classes, title_suffix="DeepCox")
-    
-    utils.kaplan_meier_plot(
-    y_test=y_test,
-    pred_classes=y_pred_deep_classes,
-    logrank_p_value=p_value_deep,
-    title_suffix="DeepCox",
-    output_path=settings.PLOT_PATH / "KM_popolazione_deepcox.png"
-)
-
-    logger.info("--- CLASSIFICATION REPORT DEEP COX ---")
-    classifier_deep.compute_classification_report(
-    y_test=y_test, 
-    y_train=y_train, 
-    y_pred_class=y_pred_deep_classes
-    )
-    
-    logger.info("\n--- PREDICTION REPORT DEEP COX ---")
-    df_patients_class_deep = classifier_deep.generate_prediction_report(
-        patient_ids=data_processor.patient_ids_test, 
-        y_test=y_test, 
-        predicted_time=deep_pred_days,
-        y_pred_class=y_pred_deep_classes,
-        risk_scores_test=deep_risk_scores
+    if deep_risk_scores is not None and deep_pred_days is not None:
+        try:
+            classifier_deep = SurvivalRiskClassifier(trained_model=deep_cox)
+            classifier_deep.fit_threshold(X_train)
+            y_pred_deep_classes = classifier_deep.predict_risk_class(risk_scores=deep_risk_scores)
+            p_value_deep = classifier_deep.evaluate_stratification(y_test=y_test, y_pred_class=y_pred_deep_classes, title_suffix="DeepCox")
+            
+            utils.kaplan_meier_plot(
+            y_test=y_test,
+            pred_classes=y_pred_deep_classes,
+            logrank_p_value=p_value_deep,
+            title_suffix="DeepCox",
+            output_path=settings.PLOT_PATH / "KM_popolazione_deepcox.png"
         )
-    
-    deep_cox_class_dir = output_directory / "classes_deep_cox.csv"
-    df_patients_class_deep.to_csv(deep_cox_class_dir, index=False, float_format="%.4f")
-    logger.info(f"Classification Deep Cox predictions saved in {deep_cox_class_dir}")
 
+            logger.info("--- CLASSIFICATION REPORT DEEP COX ---")
+            classifier_deep.compute_classification_report(
+            y_test=y_test, 
+            y_train=y_train, 
+            y_pred_class=y_pred_deep_classes
+            )
+            
+            logger.info("\n--- PREDICTION REPORT DEEP COX ---")
+            df_patients_class_deep = classifier_deep.generate_prediction_report(
+                patient_ids=data_processor.patient_ids_test, 
+                y_test=y_test, 
+                predicted_time=deep_pred_days,
+                y_pred_class=y_pred_deep_classes,
+                risk_scores_test=deep_risk_scores
+                )
+            
+            deep_cox_class_dir = output_directory / "classes_deep_cox.csv"
+            df_patients_class_deep.to_csv(deep_cox_class_dir, index=False, float_format="%.4f")
+            logger.info(f"Classification Deep Cox predictions saved in {deep_cox_class_dir}")            
+        
+        except ValueError as e:
+            logger.warning(f"[SKIPPED] Deep Cox Risk Stratification failed: {e}")
+            logger.warning("One of the risk groups might be empty in the test set. Kaplan-Meier plot skipped.")
+    else:
+        logger.warning("[SKIPPED] Deep Cox Risk Classification omitted because the base model training failed.")
 
     logger.info("\n" + "=" * 100)
     logger.info("\nPipeline executed successfully!")
