@@ -219,6 +219,8 @@ def main ():
             if extracted_features:
                 utils.save_features_to_csv(features_list=extracted_features, output_path=settings.RAD_FEATURES_CSV_PATH)
                 logger.info(f"Features successfully extracted and saved to {settings.RAD_FEATURES_CSV_PATH}")
+
+                features_exist = True
             else:
                 logger.error("No features were extracted. CSV file was not created.")
         else:
@@ -233,7 +235,7 @@ def main ():
     # --- SECURITY BLOCK FOR DATA ANALYSIS ---
     # If the code gets here and features_exist is False, it means the user used --skip-extraction
     # BUT the CSV file on disk is missing or belongs to an old dataset/number of patients!
-    if not features_exist:
+    if not settings.RAD_FEATURES_CSV_PATH.exists() or not features_exist:
         logger.error("\n" + "!"*100)
         logger.error("CRITICAL ERROR: FEATURES CSV IS MISSING OR OUTDATED COMPARED TO CURRENT DICOM DATA!")
         logger.error("You requested to skip extraction, but the existing CSV does not match the current patients.")
@@ -255,22 +257,33 @@ def main ():
     df_merged = data_processor.load_and_merge(settings.patientID, settings.stage_col, settings.gender_col, 
                                               settings.histology_col, settings.stage_mapping, settings.gender_mapping)
     
-    # Split and standardize data
-    X_total, y_total, X_train, X_test, y_train, y_test = data_processor.split_and_standardize(
-        patientID = settings.patientID,
-        survival_time_col=settings.survival_time_col,
-        event_status_col=settings.event_status_col,
-        train_size=0.8,
-        random_seed=42
-    )
-    
-    # --- SECURITY BLOCK FOR TRAINING DATA SIZE ---
-    MIN_PATIENTS = 15  
-    if X_train.shape[0] < MIN_PATIENTS:
-        logger.error(f"\n" + "!"*100)
-        logger.error(f"ERROR: Dataset too small for training ({X_train.shape[0]} patients in the Train Set).")
-        logger.error(f"To ensure convergence of Lasso-Cox and Deep Cox, at least {MIN_PATIENTS} patients are required.")
-        logger.error("The processing is halted to prevent mathematical crashes.")
+    # try-except PROTECTION FOR STRATIFICATION AND STANDARDIZATION
+    try: 
+        # Split and standardize data
+        X_total, y_total, X_train, X_test, y_train, y_test = data_processor.split_and_standardize(
+            patientID = settings.patientID,
+            survival_time_col=settings.survival_time_col,
+            event_status_col=settings.event_status_col,
+            train_size=0.8,
+            random_seed=42
+        )
+        
+        # --- SECURITY BLOCK FOR TRAINING DATA SIZE ---
+        MIN_PATIENTS = 15  
+        if X_train.shape[0] < MIN_PATIENTS:
+            logger.error(f"\n" + "!"*100)
+            logger.error(f"ERROR: Dataset too small for training ({X_train.shape[0]} patients in the Train Set).")
+            logger.error(f"To ensure convergence of Lasso-Cox and Deep Cox, at least {MIN_PATIENTS} patients are required.")
+            logger.error("The processing is halted to prevent mathematical crashes.")
+            logger.error("!"*100 + "\n")
+            return
+        
+    except ValueError as e:
+        logger.error("\n" + "!"*100)
+        logger.error(f"CRITICAL ERROR DURING DATA SPLITTING: {e}")
+        logger.error("The dataset selected is too small or highly unbalanced.")
+        logger.error("Stratified split failed because one of the outcome classes has fewer than 2 samples.")
+        logger.error("Please increase the number of patients (e.g., --n-patients 40) to ensure a stable statistical split.")
         logger.error("!"*100 + "\n")
         return
 
