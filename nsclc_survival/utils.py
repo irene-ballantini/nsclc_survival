@@ -84,7 +84,7 @@ def plot_deviance_residuals(df_risk_residuals, output_path):
     model expectations).
 
     Args:
-        df_risk_residuals (pandas.DataFrame): DataFrame containing at least the columns 
+        df_risk_residuals (pandas.DataFrame): DataFrame containing the columns 
             risk_score (predicted hazard/risk) and deviance_residual for each patient.
         output_path (pathlib.Path): Path where the generated 
             scatter plot image will be saved.

@@ -61,7 +61,7 @@ def mappings():
 
 
 # ==========================================
-# UNIT TESTS
+# UNIT TESTS for RadiomicsClinicalDataProcessor
 # ==========================================
 
 def test_initialization(mock_csv_files):
@@ -449,7 +449,7 @@ def test_residuals_computations(trained_model_box, mock_survival_data):
     assert not df_advanced_res['Deviance_Residual'].isna().any()
 
 # ==========================================
-# UNIT TEST PER DEEP COX (DEEPSURV)
+# UNIT TESTS FOR DEEP COX (DEEPSURV)
 # ==========================================
 
 def test_tool_curve_evaluation():
@@ -642,7 +642,6 @@ def test_survival_risk_classifier_pipeline(mock_survival_data):
     assert np.all((y_pred_class == 0) | (y_pred_class == 1)) # Verify that it is a binary array
     
     # Test evaluate_stratification (Log-Rank Test)
-    # Mock the logrank_test function from lifelines if we don't want to depend on stochastic convergence
     p_value = classifier.evaluate_stratification(y_test_df, y_pred_class, title_suffix="Test_Run")
     assert isinstance(p_value, float)
     assert 0.0 <= p_value <= 1.0

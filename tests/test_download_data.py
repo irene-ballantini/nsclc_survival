@@ -4,7 +4,7 @@
 import pytest
 import pandas as pd
 from nsclc_survival._download_data import download_nsclc_radiomics_data
-from nsclc_survival.settings import COLLECTION_NAME, N_PATIENTS, patientID, modality, CT, RTSTRUCT
+from nsclc_survival.settings import patientID, modality, CT, RTSTRUCT
 
 def test_download_nsclc_radiomics_data_success(mocker):    
     """

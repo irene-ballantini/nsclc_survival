@@ -36,6 +36,9 @@ class FeatureExtractor:
         """
         Extract features from all patients in the directory.
 
+        Args:
+            preprocessed_path (Path): Path to the directory containing preprocessed patient folders.
+
         Returns:
             list of dict: A list where each element is a dictionary of extracted features 
                 for a single patient. 

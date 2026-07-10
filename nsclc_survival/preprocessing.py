@@ -181,8 +181,8 @@ class RadiomicsPreprocessor:
 
         Args:
             itk_image (sitk.Image): Image to resample.
-            out_spacing (list): New spacing in mm. Defaults to [1.0, 1.0, 1.0].
-            is_label (bool):If True, use NearestNeighbor to preserve binary values.
+            out_spacing (list, optional): New spacing in mm. Defaults to [1.0, 1.0, 1.0].
+            is_label (bool, optional):If True, use NearestNeighbor to preserve binary values.
                             If False, use BSpline to maintain image quality. 
                             Defaults to False.
 
