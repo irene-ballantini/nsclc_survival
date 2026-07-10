@@ -1,6 +1,10 @@
 from pathlib import Path
 
 # --- Base Paths ---
+# To isolate a test or redirect outputs safely, you could simply change only the DATA_DIR constant
+# e.g., by setting DATA_DIR = BASE_DIR / "data_new" to redirect all outputs to a new folder.
+# The entire internal directory tree will be automatically re-routed and created upon execution, 
+# keeping the package structure invariant without needing to manually edit individual subdirectories.
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
