@@ -122,7 +122,6 @@ def main():
     logger.info(f"-> Deep Cox Test C-Index: {c_index_deep:.4f}")
     
     logger.info("\n[SUCCESS] Example Pipeline executed successfully!")
-    logger.info(f"Plots and results are saved in the dedicated folders in: {settings.DATA_DIR}")
 
 if __name__ == "__main__":
     main()
