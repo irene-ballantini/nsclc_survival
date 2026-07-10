@@ -16,6 +16,7 @@ This is a Python package designed for analyzing CT-extracted radiomic features a
 * [Pipeline Workflow](#pipeline-workflow)
 * [To Show Some Results](#to-show-some-results)
 * [References](#references)
+* [Licence](#license)
 * [Contacts](#contacts)
 
 ## Project Overview
@@ -442,6 +443,12 @@ The analysis reveals that the **Histology** categorical features exert the stron
 * **Kalbfleisch, John D. & Prentice, Ross L.** (2002). *The Statistical Analysis of Failure Time Data*. John Wiley & Sons.
 * **Sala, C.** (2025). *Statistical Data Analysis for Applied Physics (module 2) notes*.
 * **The Cancer Imaging Archive**. *NSCLC-RADIOMICS*. [TCIA Website](https://www.cancerimagingarchive.net/collection/nsclc-radiomics/)
+
+---
+
+## License
+
+The `nsclc_survival` package is licensed under the MIT [license](https://github.com/irene-ballantini/nsclc_survival/blob/main/LICENSE).
 
 ---
 
